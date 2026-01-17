@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,62 +7,58 @@
 
 #include <memory>
 
-#include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "components/account_manager_core/account_manager_facade.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
-namespace base {
-class FilePath;
-}
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-namespace signin {
-class ConsistencyCookieManager;
-}
-
-class AccountProfileMapper;
-class SigninHelperLacros;
-class SigninClient;
-struct CoreAccountId;
-#endif
-
 class PrefService;
+class SigninClient;
+
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+BASE_DECLARE_FEATURE(kPreventSignoutIfAccountValid);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+// See `SigninManager::CreateAccountSelectionInProgressHandle()`.
+class AccountSelectionInProgressHandle {
+ public:
+  AccountSelectionInProgressHandle(const AccountSelectionInProgressHandle&) =
+      delete;
+  AccountSelectionInProgressHandle& operator=(
+      const AccountSelectionInProgressHandle&) = delete;
+
+  virtual ~AccountSelectionInProgressHandle() = default;
+
+ protected:
+  AccountSelectionInProgressHandle() = default;
+};
 
 class SigninManager : public KeyedService,
                       public signin::IdentityManager::Observer {
  public:
-  SigninManager(PrefService* prefs,
-                signin::IdentityManager* identity_manger,
-                SigninClient* client);
+  SigninManager(PrefService& prefs,
+                signin::IdentityManager& identity_manager,
+                SigninClient& client);
   ~SigninManager() override;
 
   SigninManager(const SigninManager&) = delete;
   SigninManager& operator=(const SigninManager&) = delete;
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void StartLacrosSigninFlow(
-      const base::FilePath& profile_path,
-      AccountProfileMapper* account_profile_mapper,
-      signin::ConsistencyCookieManager* consistency_cookie_manager,
-      account_manager::AccountManagerFacade::AccountAdditionSource source,
-      base::OnceCallback<void(const CoreAccountId&)> on_completion_callback =
-          base::DoNothing());
-#endif
+  // Returns a scoped handle that prevents `SigninManager` from changing the
+  // unconsented primary account.
+  virtual std::unique_ptr<AccountSelectionInProgressHandle>
+  CreateAccountSelectionInProgressHandle();
 
  private:
   // Updates the cached version of unconsented primary account and notifies the
   // observers if there is any change.
-  void UpdateUnconsentedPrimaryAccount();
+  void UpdateUnconsentedPrimaryAccount(
+      signin_metrics::ProfileSignout source =
+          signin_metrics::ProfileSignout::kSigninManagerUpdateUPA);
 
   // Computes and returns the unconsented primary account (UPA).
   // - If a primary account with sync consent exists, the UPA is equal to it.
@@ -86,30 +82,26 @@ class SigninManager : public KeyedService,
   void Shutdown() override;
 
   // signin::IdentityManager::Observer implementation.
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event_details) override;
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
   void OnEndBatchOfRefreshTokenStateChanges() override;
   void OnRefreshTokensLoaded() override;
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
       const GoogleServiceAuthError& error) override;
-  void OnAccountsCookieDeletedByUserAction() override;
   void OnErrorStateOfRefreshTokenUpdatedForAccount(
       const CoreAccountInfo& account_info,
-      const GoogleServiceAuthError& error) override;
+      const GoogleServiceAuthError& error,
+      signin_metrics::SourceForRefreshTokenOperation token_operation_source)
+      override;
 
   void OnSigninAllowedPrefChanged();
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void OnSigninHelperLacrosComplete(
-      base::OnceCallback<void(const CoreAccountId&)> on_completion_callback,
-      const CoreAccountId& account_id);
-#endif
+  void OnAccountSelectionInProgressHandleDestroyed();
 
-  raw_ptr<PrefService> prefs_;
-  raw_ptr<signin::IdentityManager> identity_manager_;
+  const raw_ref<PrefService> prefs_;
+  const raw_ref<SigninClient> signin_client_;
+  const raw_ref<signin::IdentityManager> identity_manager_;
   base::ScopedObservation<signin::IdentityManager,
                           signin::IdentityManager::Observer>
       identity_manager_observation_{this};
@@ -117,12 +109,10 @@ class SigninManager : public KeyedService,
   // Helper object to listen for changes to the signin allowed preference.
   BooleanPrefMember signin_allowed_;
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  std::unique_ptr<SigninHelperLacros> signin_helper_lacros_;
-  // Whether this is the main profile for which the primary account is
-  // the account used to signin to the device aka initial primary account.
-  bool is_main_profile_ = false;
-#endif
+  // The number of handles currently active, that indicates the number of UIs
+  // currently manipulating the unconsented primary account.
+  // We should not reset the UPA while it's not `0`.
+  int live_account_selection_handles_count_ = 0;
 
   base::WeakPtrFactory<SigninManager> weak_ptr_factory_{this};
 };

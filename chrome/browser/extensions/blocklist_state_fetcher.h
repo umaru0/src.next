@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,13 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "extensions/browser/blocklist_state.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -25,7 +28,7 @@ class TestBlocklistStateFetcher;
 
 class BlocklistStateFetcher {
  public:
-  typedef base::OnceCallback<void(BlocklistState)> RequestCallback;
+  using RequestCallback = base::OnceCallback<void(BlocklistState)>;
 
   BlocklistStateFetcher();
 
@@ -50,7 +53,7 @@ class BlocklistStateFetcher {
 
  private:
   friend class TestBlocklistStateFetcher;
-  typedef std::multimap<std::string, RequestCallback> CallbackMultiMap;
+  using CallbackMultiMap = std::multimap<std::string, RequestCallback>;
 
   GURL RequestUrl() const;
 

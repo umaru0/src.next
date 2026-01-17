@@ -1,16 +1,16 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_WEB_UI_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_WEB_UI_H_
 
-#include <memory>
-#include <string>
-
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
 #include "components/favicon_base/favicon_callback.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 class Profile;
 
@@ -38,12 +38,12 @@ class ExtensionWebUI {
   static bool HandleChromeURLOverrideReverse(
       GURL* url, content::BrowserContext* browser_context);
 
-  // Returns the extension that currently controls the specified |url|, if any.
+  // Returns the extension that currently controls the specified `url`, if any.
   static const extensions::Extension* GetExtensionControllingURL(
       const GURL& url,
       content::BrowserContext* browser_context);
 
-  // Returns the number of extensions that are overriding the given |url|. Note
+  // Returns the number of extensions that are overriding the given `url`. Note
   // that only one is *actively* overriding it; the others would take over if
   // that one were to be disabled or removed.
   static size_t GetNumberOfExtensionsOverridingURL(
@@ -80,18 +80,10 @@ class ExtensionWebUI {
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Get the favicon for the extension by getting an icon from the manifest.
-  // Note. |callback| is always run asynchronously.
+  // Note. `callback` is always run asynchronously.
   static void GetFaviconForURL(Profile* profile,
                                const GURL& page_url,
                                favicon_base::FaviconResultsCallback callback);
-
- private:
-  // Unregister the specified override, and if it's the currently active one,
-  // ensure that something takes its place.
-  static void UnregisterAndReplaceOverride(const std::string& page,
-                                           Profile* profile,
-                                           base::ListValue* list,
-                                           const base::Value* override);
 };
 
 #endif  // CHROME_BROWSER_EXTENSIONS_EXTENSION_WEB_UI_H_

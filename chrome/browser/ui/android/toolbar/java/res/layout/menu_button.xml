@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2018 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2018 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 <merge
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -14,15 +16,17 @@
 
        <org.chromium.ui.widget.ChromeImageButton
            android:id="@+id/menu_button"
-           style="@style/ToolbarMenuButton"
+           style="@style/ToolbarHoverableMenuButton.AdaptiveDensity"
            android:src="@drawable/ic_more_vert_24dp"
            android:contentDescription="@string/accessibility_toolbar_btn_menu"
+           android:tooltipText="@string/accessibility_toolbar_btn_menu"
            android:layout_gravity="center"
            app:tint="@color/default_icon_color_tint_list" />
 
        <ImageView
            android:id="@+id/menu_badge"
-           style="@style/ToolbarMenuButton"
+           style="@style/ToolbarHoverableMenuButton.AdaptiveDensity"
+           android:background="@drawable/toolbar_menu_button_ripple"
            android:src="@drawable/badge_update_dark"
            tools:ignore="ContentDescription"
            android:importantForAccessibility="no"

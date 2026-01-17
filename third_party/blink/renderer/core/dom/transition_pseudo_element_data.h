@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,13 +21,12 @@ class TransitionPseudoElementData final
   TransitionPseudoElementData& operator=(const TransitionPseudoElementData&) =
       delete;
 
-  void SetPseudoElement(
-      PseudoId,
-      PseudoElement*,
-      const AtomicString& document_transition_tag = g_null_atom);
+  void SetPseudoElement(PseudoId,
+                        PseudoElement*,
+                        const AtomicString& view_transition_name = g_null_atom);
   PseudoElement* GetPseudoElement(
       PseudoId,
-      const AtomicString& document_transition_tag = g_null_atom) const;
+      const AtomicString& view_transition_name = g_null_atom) const;
 
   void AddPseudoElements(HeapVector<Member<PseudoElement>, 2>* result) const;
 
@@ -38,6 +37,7 @@ class TransitionPseudoElementData final
     visitor->Trace(transition_outgoing_image_);
     visitor->Trace(transition_incoming_image_);
     visitor->Trace(transition_image_wrapper_);
+    visitor->Trace(transition_nested_groups_);
     visitor->Trace(transition_containers_);
   }
 
@@ -46,28 +46,33 @@ class TransitionPseudoElementData final
   Member<PseudoElement> transition_outgoing_image_;
   Member<PseudoElement> transition_incoming_image_;
   Member<PseudoElement> transition_image_wrapper_;
+  Member<PseudoElement> transition_nested_groups_;
   HeapHashMap<AtomicString, Member<PseudoElement>> transition_containers_;
 };
 
 inline bool TransitionPseudoElementData::HasPseudoElements() const {
   return transition_ || transition_outgoing_image_ ||
          transition_incoming_image_ || transition_image_wrapper_ ||
-         !transition_containers_.IsEmpty();
+         transition_nested_groups_ || !transition_containers_.empty();
 }
 
 inline void TransitionPseudoElementData::ClearPseudoElements() {
-  SetPseudoElement(kPseudoIdPageTransition, nullptr);
-  SetPseudoElement(kPseudoIdPageTransitionImageWrapper, nullptr,
+  SetPseudoElement(kPseudoIdViewTransition, nullptr);
+  SetPseudoElement(kPseudoIdViewTransitionGroupChildren, nullptr,
+                   transition_nested_groups_
+                       ? transition_nested_groups_->view_transition_name()
+                       : g_null_atom);
+  SetPseudoElement(kPseudoIdViewTransitionImagePair, nullptr,
                    transition_image_wrapper_
-                       ? transition_image_wrapper_->document_transition_tag()
+                       ? transition_image_wrapper_->view_transition_name()
                        : g_null_atom);
-  SetPseudoElement(kPseudoIdPageTransitionOutgoingImage, nullptr,
+  SetPseudoElement(kPseudoIdViewTransitionOld, nullptr,
                    transition_outgoing_image_
-                       ? transition_outgoing_image_->document_transition_tag()
+                       ? transition_outgoing_image_->view_transition_name()
                        : g_null_atom);
-  SetPseudoElement(kPseudoIdPageTransitionIncomingImage, nullptr,
+  SetPseudoElement(kPseudoIdViewTransitionNew, nullptr,
                    transition_incoming_image_
-                       ? transition_incoming_image_->document_transition_tag()
+                       ? transition_incoming_image_->view_transition_name()
                        : g_null_atom);
 
   for (auto& entry : transition_containers_)
@@ -78,54 +83,40 @@ inline void TransitionPseudoElementData::ClearPseudoElements() {
 inline void TransitionPseudoElementData::SetPseudoElement(
     PseudoId pseudo_id,
     PseudoElement* element,
-    const AtomicString& document_transition_tag) {
-  PseudoElement* previous_element = nullptr;
+    const AtomicString& view_transition_name) {
+  PseudoElement* previous_element =
+      GetPseudoElement(pseudo_id, view_transition_name);
   switch (pseudo_id) {
-    case kPseudoIdPageTransition:
-      previous_element = transition_;
+    case kPseudoIdViewTransition:
       transition_ = element;
       break;
-    case kPseudoIdPageTransitionImageWrapper:
+    case kPseudoIdViewTransitionImagePair:
       DCHECK(!element ||
-             element->document_transition_tag() == document_transition_tag);
-      DCHECK(!transition_image_wrapper_ ||
-             transition_image_wrapper_->document_transition_tag() ==
-                 document_transition_tag);
-
-      previous_element = transition_image_wrapper_;
+             element->view_transition_name() == view_transition_name);
       transition_image_wrapper_ = element;
       break;
-    case kPseudoIdPageTransitionOutgoingImage:
+    case kPseudoIdViewTransitionGroupChildren:
       DCHECK(!element ||
-             element->document_transition_tag() == document_transition_tag);
-      DCHECK(!transition_outgoing_image_ ||
-             transition_outgoing_image_->document_transition_tag() ==
-                 document_transition_tag);
-
-      previous_element = transition_outgoing_image_;
+             element->view_transition_name() == view_transition_name);
+      transition_nested_groups_ = element;
+      break;
+    case kPseudoIdViewTransitionOld:
+      DCHECK(!element ||
+             element->view_transition_name() == view_transition_name);
       transition_outgoing_image_ = element;
       break;
-    case kPseudoIdPageTransitionIncomingImage:
+    case kPseudoIdViewTransitionNew:
       DCHECK(!element ||
-             element->document_transition_tag() == document_transition_tag);
-      DCHECK(!transition_incoming_image_ ||
-             transition_incoming_image_->document_transition_tag() ==
-                 document_transition_tag);
-
-      previous_element = transition_incoming_image_;
+             element->view_transition_name() == view_transition_name);
       transition_incoming_image_ = element;
       break;
-    case kPseudoIdPageTransitionContainer: {
-      DCHECK(document_transition_tag);
-
-      auto it = transition_containers_.find(document_transition_tag);
-      previous_element =
-          it == transition_containers_.end() ? nullptr : it->value;
+    case kPseudoIdViewTransitionGroup: {
+      DCHECK(view_transition_name);
       if (element) {
-        DCHECK_EQ(element->document_transition_tag(), document_transition_tag);
-        transition_containers_.Set(element->document_transition_tag(), element);
+        DCHECK_EQ(element->view_transition_name(), view_transition_name);
+        transition_containers_.Set(view_transition_name, element);
       } else {
-        transition_containers_.erase(it);
+        transition_containers_.erase(view_transition_name);
       }
       break;
     }
@@ -139,56 +130,61 @@ inline void TransitionPseudoElementData::SetPseudoElement(
 
 inline PseudoElement* TransitionPseudoElementData::GetPseudoElement(
     PseudoId pseudo_id,
-    const AtomicString& document_transition_tag) const {
-  if (kPseudoIdPageTransition == pseudo_id)
-    return transition_;
-  if (kPseudoIdPageTransitionImageWrapper == pseudo_id) {
-    DCHECK(document_transition_tag);
-    if (transition_image_wrapper_ &&
-        transition_image_wrapper_->document_transition_tag() ==
-            document_transition_tag) {
-      return transition_image_wrapper_;
+    const AtomicString& view_transition_name) const {
+  switch (pseudo_id) {
+    case kPseudoIdViewTransition:
+      return transition_.Get();
+    case kPseudoIdViewTransitionImagePair:
+      DCHECK(!transition_image_wrapper_ || !view_transition_name ||
+             transition_image_wrapper_->view_transition_name() ==
+                 view_transition_name);
+      return transition_image_wrapper_.Get();
+    case kPseudoIdViewTransitionGroupChildren:
+      DCHECK(!transition_nested_groups_ || !view_transition_name ||
+             transition_nested_groups_->view_transition_name() ==
+                 view_transition_name);
+      return transition_nested_groups_.Get();
+    case kPseudoIdViewTransitionOld:
+      DCHECK(!transition_outgoing_image_ || !view_transition_name ||
+             transition_outgoing_image_->view_transition_name() ==
+                 view_transition_name);
+      return transition_outgoing_image_.Get();
+    case kPseudoIdViewTransitionNew:
+      DCHECK(!transition_incoming_image_ || !view_transition_name ||
+             transition_incoming_image_->view_transition_name() ==
+                 view_transition_name);
+      return transition_incoming_image_.Get();
+    case kPseudoIdViewTransitionGroup: {
+      DCHECK(view_transition_name);
+      auto it = transition_containers_.find(view_transition_name);
+      return it == transition_containers_.end() ? nullptr : it->value.Get();
     }
-    return nullptr;
-  }
-  if (kPseudoIdPageTransitionOutgoingImage == pseudo_id) {
-    DCHECK(document_transition_tag);
-    if (transition_outgoing_image_ &&
-        transition_outgoing_image_->document_transition_tag() ==
-            document_transition_tag) {
-      return transition_outgoing_image_;
-    }
-    return nullptr;
-  }
-  if (kPseudoIdPageTransitionIncomingImage == pseudo_id) {
-    DCHECK(document_transition_tag);
-    if (transition_incoming_image_ &&
-        transition_incoming_image_->document_transition_tag() ==
-            document_transition_tag) {
-      return transition_incoming_image_;
-    }
-    return nullptr;
-  }
-  if (kPseudoIdPageTransitionContainer == pseudo_id) {
-    DCHECK(document_transition_tag);
-    auto it = transition_containers_.find(document_transition_tag);
-    return it == transition_containers_.end() ? nullptr : it->value;
+    default:
+      NOTREACHED();
   }
   return nullptr;
 }
 
 inline void TransitionPseudoElementData::AddPseudoElements(
     HeapVector<Member<PseudoElement>, 2>* result) const {
-  if (transition_)
+  if (transition_) {
     result->push_back(transition_);
-  if (transition_image_wrapper_)
+  }
+  if (transition_image_wrapper_) {
     result->push_back(transition_image_wrapper_);
-  if (transition_outgoing_image_)
+  }
+  if (transition_nested_groups_) {
+    result->push_back(transition_nested_groups_);
+  }
+  if (transition_outgoing_image_) {
     result->push_back(transition_outgoing_image_);
-  if (transition_incoming_image_)
+  }
+  if (transition_incoming_image_) {
     result->push_back(transition_incoming_image_);
-  for (const auto& entry : transition_containers_)
+  }
+  for (const auto& entry : transition_containers_) {
     result->push_back(entry.value);
+  }
 }
 
 }  // namespace blink

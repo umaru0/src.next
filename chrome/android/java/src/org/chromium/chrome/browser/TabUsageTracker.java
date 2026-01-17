@@ -1,20 +1,26 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser;
 
-import androidx.annotation.VisibleForTesting;
+import static org.chromium.build.NullUtil.assumeNonNull;
 
+import org.chromium.base.CallbackController;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -24,6 +30,7 @@ import java.util.Set;
  * number of tabs used, to the total number of tabs available between ChromeTabbedActivity onResume
  * and onStop.
  */
+@NullMarked
 public class TabUsageTracker
         implements StartStopWithNativeObserver, DestroyObserver, PauseResumeWithNativeObserver {
     private static final String PERCENTAGE_OF_TABS_USED_HISTOGRAM =
@@ -37,15 +44,16 @@ public class TabUsageTracker
     private int mNewlyAddedTabCount;
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final TabModelSelector mModelSelector;
-    private TabModelSelectorObserver mTabModelSelectorObserver;
-    private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
+    private @Nullable TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private boolean mApplicationResumed;
+    private final CallbackController mCallbackController = new CallbackController();
 
     /**
      * This method is used to initialize the TabUsageTracker.
+     *
      * @param lifecycleDispatcher LifecycleDispatcher used to subscribe class to lifecycle events.
      * @param modelSelector TabModelSelector used to subscribe to TabModelSelectorTabModelObserver
-     *         to capture when tabs are selected or new tabs are added.
+     *     to capture when tabs are selected or new tabs are added.
      */
     public static void initialize(
             ActivityLifecycleDispatcher lifecycleDispatcher, TabModelSelector modelSelector) {
@@ -65,8 +73,8 @@ public class TabUsageTracker
 
     @Override
     public void onDestroy() {
+        mCallbackController.destroy();
         mLifecycleDispatcher.unregister(this);
-        mModelSelector.removeObserver(mTabModelSelectorObserver);
     }
 
     @Override
@@ -92,6 +100,7 @@ public class TabUsageTracker
         mTabsUsed.clear();
         mNewlyAddedTabCount = 0;
         mInitialTabCount = 0;
+        assumeNonNull(mTabModelSelectorTabModelObserver);
         mTabModelSelectorTabModelObserver.destroy();
         mApplicationResumed = false;
     }
@@ -102,41 +111,40 @@ public class TabUsageTracker
      */
     @Override
     public void onResumeWithNative() {
-        if (mModelSelector.isTabStateInitialized()) {
-            mInitialTabCount = mModelSelector.getTotalTabCount();
-        } else {
-            mTabModelSelectorObserver = new TabModelSelectorObserver() {
-                @Override
-                public void onTabStateInitialized() {
-                    mInitialTabCount = mModelSelector.getTotalTabCount();
-                }
-            };
-            mModelSelector.addObserver(mTabModelSelectorObserver);
-        }
+        TabModelUtils.runOnTabStateInitialized(
+                mModelSelector,
+                mCallbackController.makeCancelable(
+                        (tabModelSelector) -> {
+                            mInitialTabCount = tabModelSelector.getTotalTabCount();
+                        }));
 
-        Tab currentlySelectedTab =
-                mModelSelector.getCurrentModel().getTabAt(mModelSelector.getCurrentModelIndex());
+        Tab currentlySelectedTab = mModelSelector.getCurrentTab();
         if (currentlySelectedTab != null) mTabsUsed.add(currentlySelectedTab.getId());
 
-        mTabModelSelectorTabModelObserver = new TabModelSelectorTabModelObserver(mModelSelector) {
-            @Override
-            public void didAddTab(Tab tab, int type, int creationState) {
-                mNewlyAddedTabCount++;
-            }
+        mTabModelSelectorTabModelObserver =
+                new TabModelSelectorTabModelObserver(mModelSelector) {
+                    @Override
+                    public void didAddTab(
+                            Tab tab,
+                            @TabLaunchType int type,
+                            @TabCreationState int creationState,
+                            boolean markedForSelection) {
+                        mNewlyAddedTabCount++;
+                    }
 
-            @Override
-            public void didSelectTab(Tab tab, int type, int lastId) {
-                mTabsUsed.add(tab.getId());
-            }
-        };
+                    @Override
+                    public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
+                        mTabsUsed.add(tab.getId());
+                    }
+                };
         mApplicationResumed = true;
     }
 
     @Override
     public void onPauseWithNative() {}
 
-    @VisibleForTesting
-    public TabModelSelectorTabModelObserver getTabModelSelectorTabModelObserverForTests() {
+    public @Nullable
+            TabModelSelectorTabModelObserver getTabModelSelectorTabModelObserverForTests() {
         return mTabModelSelectorTabModelObserver;
     }
 }

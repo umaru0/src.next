@@ -1,14 +1,15 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <limits>
 
 #include "base/base_paths.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
@@ -22,7 +23,6 @@
 #include "services/data_decoder/public/cpp/decode_image.h"
 #include "services/data_decoder/public/mojom/data_decoder_service.mojom.h"
 #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
-#include "services/data_decoder/public/mojom/json_parser.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using ::testing::Pair;
@@ -37,8 +37,9 @@ namespace {
 bool ReadTestFile(const base::FilePath& relative_path,
                   std::vector<uint8_t>& output) {
   base::FilePath source_root_dir;
-  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root_dir))
+  if (!base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root_dir)) {
     return false;
+  }
 
   std::string file_contents_as_string;
   {
@@ -103,7 +104,7 @@ class ServiceProcessObserver : public ServiceProcessHost::Observer {
   }
 
  private:
-  absl::optional<base::RunLoop> launch_wait_loop_;
+  std::optional<base::RunLoop> launch_wait_loop_;
   int instances_started_ = 0;
 };
 
@@ -127,25 +128,27 @@ IN_PROC_BROWSER_TEST_F(DataDecoderBrowserTest, LaunchIsolated) {
   ServiceProcessObserver observer;
 
   // Verifies that separate DataDecoder client objects will launch separate
-  // service processes. We also bind a JsonParser interface to ensure that the
-  // instances don't go idle.
+  // service processes. We also bind an ImageDecoder interface to ensure that
+  // the instances don't go idle.
   data_decoder::DataDecoder decoder1;
-  mojo::Remote<data_decoder::mojom::JsonParser> parser1;
-  decoder1.GetService()->BindJsonParser(parser1.BindNewPipeAndPassReceiver());
+  mojo::Remote<data_decoder::mojom::ImageDecoder> image_decoder1;
+  decoder1.GetService()->BindImageDecoder(
+      image_decoder1.BindNewPipeAndPassReceiver());
   observer.WaitForNextLaunch();
   EXPECT_EQ(1, observer.instances_started());
 
   data_decoder::DataDecoder decoder2;
-  mojo::Remote<data_decoder::mojom::JsonParser> parser2;
-  decoder2.GetService()->BindJsonParser(parser2.BindNewPipeAndPassReceiver());
+  mojo::Remote<data_decoder::mojom::ImageDecoder> image_decoder2;
+  decoder2.GetService()->BindImageDecoder(
+      image_decoder2.BindNewPipeAndPassReceiver());
   observer.WaitForNextLaunch();
   EXPECT_EQ(2, observer.instances_started());
 
   // Both interfaces should be connected end-to-end.
-  parser1.FlushForTesting();
-  parser2.FlushForTesting();
-  EXPECT_TRUE(parser1.is_connected());
-  EXPECT_TRUE(parser2.is_connected());
+  image_decoder1.FlushForTesting();
+  image_decoder2.FlushForTesting();
+  EXPECT_TRUE(image_decoder1.is_connected());
+  EXPECT_TRUE(image_decoder2.is_connected());
 }
 
 IN_PROC_BROWSER_TEST_F(DataDecoderBrowserTest, DecodeImageIsolated) {
@@ -263,8 +266,8 @@ IN_PROC_BROWSER_TEST_F(DataDecoderBrowserTest,
 
   // Android's in-process parser can complete synchronously, so queue the
   // delete task first unlike in the other tests.
-  base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
-                                                     std::move(decoder));
+  base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+      FROM_HERE, std::move(decoder));
 
   bool got_callback = false;
   raw_decoder->ParseJson(
@@ -300,8 +303,8 @@ IN_PROC_BROWSER_TEST_F(DataDecoderBrowserTest, NoCallbackAfterDestruction_Xml) {
           // is quit if the callback is destroyed un-run or after it runs.
           &got_callback, base::ScopedClosureRunner(run_loop.QuitClosure())));
 
-  base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
-                                                     std::move(decoder));
+  base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+      FROM_HERE, std::move(decoder));
   run_loop.Run();
 
   EXPECT_FALSE(got_callback);
@@ -324,8 +327,8 @@ IN_PROC_BROWSER_TEST_F(DataDecoderBrowserTest,
           // is quit if the callback is destroyed un-run or after it runs.
           &got_callback, base::ScopedClosureRunner(run_loop.QuitClosure())));
 
-  base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
-                                                     std::move(decoder));
+  base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+      FROM_HERE, std::move(decoder));
   run_loop.Run();
 
   EXPECT_FALSE(got_callback);

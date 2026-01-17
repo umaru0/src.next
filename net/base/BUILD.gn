@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -9,7 +9,7 @@ if (is_android) {
     # External code should depend on ":features_java" instead.
     visibility = [ ":*" ]
     sources = [ "features.cc" ]
-    template = "android/java_templates/NetFeatures.java.tmpl"
+    class_name = "org.chromium.net.NetFeatures"
   }
 
   android_library("features_java") {

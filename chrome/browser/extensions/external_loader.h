@@ -1,22 +1,20 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTERNAL_LOADER_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTERNAL_LOADER_H_
 
-#include <memory>
-
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/values.h"
+#include "extensions/buildflags/buildflags.h"
 
-namespace base {
-class DictionaryValue;
-}
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
-class ExternalProviderImpl;
+class ExternalProviderInterface;
 
 // Base class for gathering a list of external extensions. Subclasses
 // implement loading from registry, JSON file, policy.
@@ -36,7 +34,7 @@ class ExternalLoader : public base::RefCountedThreadSafe<ExternalLoader> {
   ExternalLoader& operator=(const ExternalLoader&) = delete;
 
   // Specifies the provider that owns this object.
-  void Init(ExternalProviderImpl* owner);
+  void Init(ExternalProviderInterface* owner);
 
   // Called by the owner before it gets deleted.
   void OwnerShutdown();
@@ -55,11 +53,9 @@ class ExternalLoader : public base::RefCountedThreadSafe<ExternalLoader> {
  protected:
   virtual ~ExternalLoader();
 
-  // Notifies the provider that the list of extensions has been loaded.
-  virtual void LoadFinished(std::unique_ptr<base::DictionaryValue> prefs);
+  virtual void LoadFinished(base::Value::Dict prefs);
 
-  // Notifies the provider that the list of extensions has been updated.
-  virtual void OnUpdated(std::unique_ptr<base::DictionaryValue> updated_prefs);
+  void OnUpdated(base::Value::Dict updated_prefs);
 
   // Returns true if this loader has an owner.
   // This is useful to know if calling LoadFinished/OnUpdated will propagate
@@ -69,7 +65,7 @@ class ExternalLoader : public base::RefCountedThreadSafe<ExternalLoader> {
  private:
   friend class base::RefCountedThreadSafe<ExternalLoader>;
 
-  raw_ptr<ExternalProviderImpl> owner_ = nullptr;  // weak
+  raw_ptr<ExternalProviderInterface> owner_ = nullptr;
 };
 
 }  // namespace extensions

@@ -1,6 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
 
 #include "base/rand_util.h"
 
@@ -8,22 +13,32 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/syscall.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include "base/check.h"
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/system/sys_info.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
+#include "third_party/boringssl/src/include/openssl/rand.h"
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && !BUILDFLAG(IS_NACL)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "third_party/lss/linux_syscall_support.h"
 #elif BUILDFLAG(IS_MAC)
-// TODO(crbug.com/995996): Waiting for this header to appear in the iOS SDK.
+// TODO(crbug.com/40641285): Waiting for this header to appear in the iOS SDK.
 // (See below.)
 #include <sys/random.h>
 #endif
+
+namespace base {
 
 namespace {
 
@@ -52,32 +67,79 @@ class URandomFd {
   const int fd_;
 };
 
-}  // namespace
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 
-namespace base {
+bool KernelSupportsGetRandom() {
+  return base::SysInfo::KernelVersionNumber::Current() >=
+         base::SysInfo::KernelVersionNumber(3, 17);
+}
 
-// NOTE: In an ideal future, all implementations of this function will just
-// wrap BoringSSL's `RAND_bytes`. TODO(crbug.com/995996): Figure out the
-// build/test/performance issues with dcheng's CL
-// (https://chromium-review.googlesource.com/c/chromium/src/+/1545096) and land
-// it or some form of it.
-void RandBytes(void* output, size_t output_length) {
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && !BUILDFLAG(IS_NACL)
+bool GetRandomSyscall(void* output, size_t output_length) {
   // We have to call `getrandom` via Linux Syscall Support, rather than through
   // the libc wrapper, because we might not have an up-to-date libc (e.g. on
   // some bots).
-  const ssize_t r = HANDLE_EINTR(sys_getrandom(output, output_length, 0));
+  const ssize_t r =
+      HANDLE_EINTR(syscall(__NR_getrandom, output, output_length, 0));
 
   // Return success only on total success. In case errno == ENOSYS (or any other
   // error), we'll fall through to reading from urandom below.
   if (output_length == static_cast<size_t>(r)) {
     MSAN_UNPOISON(output, output_length);
+    return true;
+  }
+  return false;
+}
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
+        // BUILDFLAG(IS_ANDROID)
+
+}  // namespace
+
+namespace internal {
+
+namespace {
+
+// The BoringSSl helpers are duplicated in rand_util_fuchsia.cc and
+// rand_util_win.cc.
+std::atomic<bool> g_use_boringssl;
+
+BASE_FEATURE(kUseBoringSSLForRandBytes,
+             "UseBoringSSLForRandBytes",
+             FEATURE_DISABLED_BY_DEFAULT);
+
+}  // namespace
+
+void ConfigureBoringSSLBackedRandBytesFieldTrial() {
+  g_use_boringssl.store(FeatureList::IsEnabled(kUseBoringSSLForRandBytes),
+                        std::memory_order_relaxed);
+}
+
+bool UseBoringSSLForRandBytes() {
+  return g_use_boringssl.load(std::memory_order_relaxed);
+}
+
+}  // namespace internal
+
+namespace {
+
+void RandBytesInternal(span<uint8_t> output, bool avoid_allocation) {
+  // The BoringSSL experiment takes priority over everything else.
+  if (!avoid_allocation && internal::UseBoringSSLForRandBytes()) {
+    // BoringSSL's RAND_bytes always returns 1. Any error aborts the program.
+    (void)RAND_bytes(output.data(), output.size());
+    return;
+  }
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+  // On Android it is mandatory to check that the kernel _version_ has the
+  // support for a syscall before calling. The same check is made on Linux and
+  // ChromeOS to avoid making a syscall that predictably returns ENOSYS.
+  static const bool kernel_has_support = KernelSupportsGetRandom();
+  if (kernel_has_support && GetRandomSyscall(output.data(), output.size())) {
     return;
   }
 #elif BUILDFLAG(IS_MAC)
-  // TODO(crbug.com/995996): Enable this on iOS too, when sys/random.h arrives
+  // TODO(crbug.com/40641285): Enable this on iOS too, when sys/random.h arrives
   // in its SDK.
-  if (getentropy(output, output_length) == 0) {
+  if (getentropy(output.data(), output.size()) == 0) {
     return;
   }
 #endif
@@ -85,12 +147,28 @@ void RandBytes(void* output, size_t output_length) {
   // If the OS-specific mechanisms didn't work, fall through to reading from
   // urandom.
   //
-  // TODO(crbug.com/995996): When we no longer need to support old Linux
+  // TODO(crbug.com/40641285): When we no longer need to support old Linux
   // kernels, we can get rid of this /dev/urandom branch altogether.
   const int urandom_fd = GetUrandomFD();
-  const bool success =
-      ReadFromFD(urandom_fd, static_cast<char*>(output), output_length);
+  const bool success = ReadFromFD(urandom_fd, as_writable_chars(output));
   CHECK(success);
+}
+
+}  // namespace
+
+namespace internal {
+
+double RandDoubleAvoidAllocation() {
+  uint64_t number;
+  RandBytesInternal(byte_span_from_ref(number), /*avoid_allocation=*/true);
+  // This transformation is explained in rand_util.cc.
+  return (number >> 11) * 0x1.0p-53;
+}
+
+}  // namespace internal
+
+void RandBytes(span<uint8_t> output) {
+  RandBytesInternal(output, /*avoid_allocation=*/false);
 }
 
 int GetUrandomFD() {

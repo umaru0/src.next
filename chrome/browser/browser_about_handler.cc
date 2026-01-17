@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,19 +6,36 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "components/policy/content/policy_blocklist_service.h"
+#include "components/policy/core/browser/url_blocklist_manager.h"
 #include "content/public/common/content_features.h"
 #include "extensions/buildflags/buildflags.h"
+
+namespace {
+
+bool IsNonNavigationAboutUrl(const GURL& url) {
+  if (!url.is_valid()) {
+    return false;
+  }
+
+  const std::string spec(url.spec());
+  return base::EqualsCaseInsensitiveASCII(spec, chrome::kChromeUIRestartURL) ||
+         base::EqualsCaseInsensitiveASCII(spec, chrome::kChromeUIQuitURL);
+  ;
+}
+
+}  // namespace
 
 bool HandleChromeAboutAndChromeSyncRewrite(
     GURL* url,
@@ -40,9 +57,6 @@ bool HandleChromeAboutAndChromeSyncRewrite(
   if (host == chrome::kChromeUIAboutHost) {
     // Replace chrome://about with chrome://chrome-urls.
     host = chrome::kChromeUIChromeURLsHost;
-  } else if (host == chrome::kChromeUISyncHost) {
-    // Replace chrome://sync with chrome://sync-internals (for legacy reasons).
-    host = chrome::kChromeUISyncInternalsHost;
   }
 
   if (host != url->host()) {
@@ -55,21 +69,35 @@ bool HandleChromeAboutAndChromeSyncRewrite(
   return false;
 }
 
-bool HandleNonNavigationAboutURL(const GURL& url) {
-  const std::string spec(url.spec());
+bool HandleNonNavigationAboutURL(const GURL& url,
+                                 content::BrowserContext* context) {
+  if (!IsNonNavigationAboutUrl(url)) {
+    return false;
+  }
 
+  // TODO(crbug.com/418187845): Remove this check once Android is supported.
+  if (context) {
+    PolicyBlocklistService* service =
+        PolicyBlocklistFactory::GetForBrowserContext(context);
+    using URLBlocklistState = policy::URLBlocklist::URLBlocklistState;
+    if (service->GetURLBlocklistState(url) ==
+        URLBlocklistState::URL_IN_BLOCKLIST) {
+      return true;
+    }
+  }
+
+  const std::string spec(url.spec());
   if (base::EqualsCaseInsensitiveASCII(spec, chrome::kChromeUIRestartURL)) {
     // Call AttemptRestart after chrome::Navigate() completes to avoid access of
     // gtk objects after they are destroyed by BrowserWindowGtk::Close().
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&chrome::AttemptRestart));
     return true;
   }
   if (base::EqualsCaseInsensitiveASCII(spec, chrome::kChromeUIQuitURL)) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&chrome::AttemptExit));
     return true;
   }
-
-  return false;
+  NOTREACHED();
 }

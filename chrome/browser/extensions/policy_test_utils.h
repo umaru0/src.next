@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ namespace policy_test_utils {
 void SetUpEmbeddedTestServer(
     net::test_server::EmbeddedTestServer* embedded_test_server);
 
-// Assigns an |extension_id| and its |update_manifest_url| to the
+// Assigns an `extension_id` and its `update_manifest_url` to the
 // "ExtensionInstallForcelist" user policy.
 // This will cause the extension to get force-installed.
 void SetExtensionInstallForcelistPolicy(

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,13 +21,8 @@
 #endif  // defined(NET_IMPLEMENTATION)
 
 #else  // defined(WIN32)
-#if defined(NET_IMPLEMENTATION)
 #define NET_EXPORT __attribute__((visibility("default")))
 #define NET_EXPORT_PRIVATE __attribute__((visibility("default")))
-#else
-#define NET_EXPORT
-#define NET_EXPORT_PRIVATE
-#endif
 #endif
 
 #else  /// defined(COMPONENT_BUILD)

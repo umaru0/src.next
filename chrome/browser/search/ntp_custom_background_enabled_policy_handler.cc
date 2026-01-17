@@ -1,10 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/search/ntp_custom_background_enabled_policy_handler.h"
 
 #include "base/values.h"
+#include "chrome/browser/themes/theme_syncable_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
@@ -16,7 +17,7 @@ NtpCustomBackgroundEnabledPolicyHandler::
                                 base::Value::Type::BOOLEAN) {}
 
 NtpCustomBackgroundEnabledPolicyHandler::
-    ~NtpCustomBackgroundEnabledPolicyHandler() {}
+    ~NtpCustomBackgroundEnabledPolicyHandler() = default;
 
 void NtpCustomBackgroundEnabledPolicyHandler::ApplyPolicySettings(
     const policy::PolicyMap& policies,
@@ -25,6 +26,6 @@ void NtpCustomBackgroundEnabledPolicyHandler::ApplyPolicySettings(
       policies.GetValue(policy_name(), base::Value::Type::BOOLEAN);
   if (value && !value->GetBool()) {
     prefs->SetValue(prefs::kNtpCustomBackgroundDict,
-                    base::Value(base::Value::Type::DICTIONARY));
+                    base::Value(base::Value::Type::DICT));
   }
 }

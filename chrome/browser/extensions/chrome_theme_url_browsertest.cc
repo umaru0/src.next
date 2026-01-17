@@ -1,10 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "content/public/test/browser_test.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/test/extension_test_message_listener.h"
 
 namespace extensions {
@@ -26,8 +26,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest,
 
   // Unload the extension so we can reload it below with no chance of side
   // effects.
-  extension_service()->UnloadExtension(extension->id(),
-                                       UnloadedExtensionReason::UNINSTALL);
+  extension_registrar()->RemoveExtension(extension->id(),
+                                         UnloadedExtensionReason::UNINSTALL);
   listener.Reset();
 
   // Now try loading the extension as a component extension.  This time the

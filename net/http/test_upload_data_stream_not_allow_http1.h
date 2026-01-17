@@ -1,9 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef NET_HTTP_TEST_UPLOAD_DATA_STREAM_NOT_ALLOW_HTTP1_H_
 #define NET_HTTP_TEST_UPLOAD_DATA_STREAM_NOT_ALLOW_HTTP1_H_
+
+#include <string>
 
 #include "net/base/upload_data_stream.h"
 

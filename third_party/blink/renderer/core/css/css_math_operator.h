@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,11 +19,37 @@ enum class CSSMathOperator {
   kMin,
   kMax,
   kClamp,
+  kRoundNearest,
+  kRoundUp,
+  kRoundDown,
+  kRoundToZero,
+  kMod,
+  kRem,
+  kHypot,
+  kAbs,
+  kSign,
+  kLog,
+  kExp,
+  kSqrt,
+  kProgress,
+  kCalcSize,
+  kMediaProgress,
+  kContainerProgress,
+  kPow,
+  kSin,
+  kCos,
+  kTan,
+  kAsin,
+  kAcos,
+  kAtan,
+  kAtan2,
+  kInvert,
   kInvalid
 };
 
 CSSMathOperator ParseCSSArithmeticOperator(const CSSParserToken& token);
-String ToString(CSSMathOperator);
+StringView ToString(CSSMathOperator);
+StringView ToRoundingStrategyString(CSSMathOperator);
 
 bool IsComparison(CSSMathOperator);
 

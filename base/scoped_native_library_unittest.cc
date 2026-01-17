@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #endif
@@ -35,7 +37,7 @@ TEST(ScopedNativeLibrary, Basic) {
     EXPECT_EQ(native_library, library.get());
     FARPROC test_function =
         reinterpret_cast<FARPROC>(library.GetFunctionPointer(kFunctionName));
-    EXPECT_EQ(0, IsBadCodePtr(test_function));
+    EXPECT_EQ(0, ::IsBadCodePtr(test_function));
     EXPECT_EQ(
         GetFunctionPointerFromNativeLibrary(native_library, kFunctionName),
         test_function);

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,10 @@ namespace metrics {
 
 // Records an NTP impression, after all tiles have loaded.
 void RecordPageImpression(int number_of_tiles);
+
+// Records the number of Custom Tiles, to be called when the NTP loads for the
+// first time and Custom Tiles are enabled.
+void RecordNumberOfCustomTilesOnFirstNtp(int number_of_custom_tiles);
 
 // Records an individual tile impression, which should be called only after the
 // visual type of the tile has been determined.

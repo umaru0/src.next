@@ -1,24 +1,22 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/load_error_reporter.h"
 
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/browser/notification_service.h"
-#include "extensions/browser/notification_types.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace extensions {
@@ -40,11 +38,11 @@ LoadErrorReporter* LoadErrorReporter::GetInstance() {
 
 LoadErrorReporter::LoadErrorReporter(bool enable_noisy_errors)
     : enable_noisy_errors_(enable_noisy_errors) {
-  if (base::ThreadTaskRunnerHandle::IsSet())
-    ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  if (base::SingleThreadTaskRunner::HasCurrentDefault())
+    ui_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
 }
 
-LoadErrorReporter::~LoadErrorReporter() {}
+LoadErrorReporter::~LoadErrorReporter() = default;
 
 void LoadErrorReporter::ReportLoadError(
     const base::FilePath& extension_path,
@@ -74,8 +72,28 @@ void LoadErrorReporter::ReportError(const std::u16string& message,
   LOG(WARNING) << "Extension error: " << message;
 
   if (enable_noisy_errors_ && be_noisy) {
-    chrome::ShowWarningMessageBox(
-        NULL,
+    // TODO(crbug.com/425390966): Find a way to make this dialog asynchronous
+    // so that we don't block the main thread.
+    //
+    // This dialog is synchronous to prevent a race condition during startup.
+    //
+    // In the asynchronous case, the sequence of events is:
+    // 1. A startup task to load an extension fails, and an asynchronous call
+    //    is made to show this parentless dialog.
+    // 2. The dialog's widget initializes, registering an accessibility observer
+    //    with `AXPlatform`. The async call then returns immediately, marking
+    //    the startup task as complete.
+    // 3. Because the startup task is finished and no windows are open, the
+    //    browser process begins its shutdown sequence.
+    // 4. During shutdown, `AXPlatform` is destroyed before the dialog is. Its
+    //    destructor's `CHECK` for no remaining observers fails because the
+    //    dialog's observer is still registered, causing a crash.
+    //
+    // By using a synchronous dialog, we block the startup task from completing
+    // until the user dismisses the alert, ensuring steps 3 and 4 cannot
+    // happen until after the dialog and its observers are gone.
+    chrome::ShowWarningMessageBoxSync(
+        gfx::NativeWindow(),
         l10n_util::GetStringUTF16(IDS_EXTENSIONS_LOAD_ERROR_ALERT_HEADING),
         message);
   }

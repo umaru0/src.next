@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ class ExtensionsBrowserAPIProvider {
       delete;
   virtual ~ExtensionsBrowserAPIProvider() = default;
 
-  // Registers any API functions in the given |registry|.
+  // Registers any API functions in the given `registry`.
   virtual void RegisterExtensionFunctions(
       ExtensionFunctionRegistry* registry) = 0;
 };

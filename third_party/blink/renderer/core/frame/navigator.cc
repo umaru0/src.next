@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -65,19 +66,38 @@ String Navigator::platform() const {
     return NavigatorBase::platform();
   const String& platform_override =
       DomWindow()->GetFrame()->GetSettings()->GetNavigatorPlatformOverride();
-  return platform_override.IsEmpty() ? NavigatorBase::platform()
-                                     : platform_override;
+  return platform_override.empty() ? NavigatorBase::platform()
+                                   : platform_override;
 }
 
 bool Navigator::cookieEnabled() const {
   if (!DomWindow())
     return false;
 
-  Settings* settings = DomWindow()->GetFrame()->GetSettings();
-  if (!settings || !settings->GetCookieEnabled())
-    return false;
+  if (DomWindow()->GetStorageKey().IsThirdPartyContext()) {
+    DomWindow()->CountUse(WebFeature::kNavigatorCookieEnabledThirdParty);
+  }
 
-  return DomWindow()->document()->CookiesEnabled();
+  Settings* settings = DomWindow()->GetFrame()->GetSettings();
+  bool cookie_enabled = settings && settings->GetCookieEnabled();
+
+#if !BUILDFLAG(IS_ANDROID)
+  // We don't want to print this message for WebView, and the utility is much
+  // lower for all Android platforms anyway, so it seems reasonable to skip.
+  if (cookie_enabled && DomWindow()->Url().IsLocalFile()) {
+    DomWindow()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "While navigator.cookieEnabled does return true for this file:// "
+            "URL, this is done for web compatability reasons. Cookies will not "
+            "actually be stored for file:// URLs. If you want this to change "
+            "please leave feedback on crbug.com/378604901."),
+        /*discard_duplicates=*/true);
+  }
+#endif
+
+  return cookie_enabled;
 }
 
 bool Navigator::webdriver() const {

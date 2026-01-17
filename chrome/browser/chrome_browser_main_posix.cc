@@ -1,6 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
 
 #include "chrome/browser/chrome_browser_main_posix.h"
 
@@ -13,12 +18,13 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
+#include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/shutdown_signal_handlers_posix.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -66,13 +72,16 @@ class ExitHandler {
 // static
 void ExitHandler::ExitWhenPossibleOnUIThread(int signal) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // DevTools delegate's browser keeplive may prevent browser from closing so
+  // remove it before proceeding because we have an explicit shutdown request.
+  ChromeDevToolsManagerDelegate::AllowBrowserToClose();
+
   if (SessionRestore::IsRestoringSynchronously()) {
     // ExitHandler takes care of deleting itself.
     new ExitHandler();
   } else {
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX)
     switch (signal) {
       case SIGINT:
       case SIGHUP:
@@ -107,8 +116,7 @@ ExitHandler::ExitHandler() {
           &ExitHandler::OnSessionRestoreDone, base::Unretained(this)));
 }
 
-ExitHandler::~ExitHandler() {
-}
+ExitHandler::~ExitHandler() = default;
 
 void ExitHandler::OnSessionRestoreDone(Profile* profile, int /* num_tabs */) {
   if (!SessionRestore::IsRestoringSynchronously()) {
@@ -123,7 +131,7 @@ void ExitHandler::OnSessionRestoreDone(Profile* profile, int /* num_tabs */) {
 
 // static
 void ExitHandler::Exit() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // On ChromeOS, exiting on signal should be always clean.
   chrome::ExitIgnoreUnloadHandlers();
 #else
@@ -150,7 +158,7 @@ int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_handler = SIGCHLDHandler;
-  CHECK_EQ(0, sigaction(SIGCHLD, &action, NULL));
+  CHECK_EQ(0, sigaction(SIGCHLD, &action, nullptr));
 
   return content::RESULT_CODE_NORMAL_EXIT;
 }
@@ -165,7 +173,7 @@ void ChromeBrowserMainPartsPosix::PostCreateMainMessageLoop() {
 }
 
 void ChromeBrowserMainPartsPosix::ShowMissingLocaleMessageBox() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   NOTREACHED();  // Should not ever happen on ChromeOS.
 #elif BUILDFLAG(IS_MAC)
   // Not called on Mac because we load the locale files differently.
@@ -175,8 +183,6 @@ void ChromeBrowserMainPartsPosix::ShowMissingLocaleMessageBox() {
   // for now, crash.
   NOTREACHED();
 #else
-#if 0
 #error "Need MessageBox implementation."
-#endif
 #endif
 }

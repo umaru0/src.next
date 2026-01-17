@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_media.h"
+#include "third_party/blink/renderer/core/layout/natural_sizing_info.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
@@ -39,9 +40,10 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
   explicit LayoutVideo(HTMLVideoElement*);
   ~LayoutVideo() override;
 
-  static LayoutSize DefaultSize();
+  static PhysicalSize DefaultSize();
 
-  PhysicalRect ReplacedContentRect() const final;
+  PhysicalRect ReplacedContentRectFrom(
+      const PhysicalRect& base_content_rect) const final;
 
   bool SupportsAcceleratedRendering() const;
 
@@ -50,12 +52,14 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
 
   HTMLVideoElement* VideoElement() const;
 
+  void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
+
   const char* GetName() const override {
     NOT_DESTROYED();
     return "LayoutVideo";
   }
 
-  void IntrinsicSizeChanged() override;
+  void NaturalSizeChanged() override;
 
   OverflowClipAxes ComputeOverflowClipAxes() const final {
     NOT_DESTROYED();
@@ -64,34 +68,30 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
   }
 
  private:
-  void UpdateFromElement() override;
+  void UpdateAfterLayout() final;
+  void UpdateFromElement() final;
+  void InvalidateCompositing();
 
-  LayoutSize CalculateIntrinsicSize(float scale);
-  void UpdateIntrinsicSize(bool is_in_layout);
+  PhysicalNaturalSizingInfo GetNaturalDimensions() const override;
+  void UpdateNaturalSize();
 
   void ImageChanged(WrappedImagePtr, CanDeferInvalidation) override;
 
-  bool IsOfType(LayoutObjectType type) const override {
+  bool IsVideo() const final {
     NOT_DESTROYED();
-    return type == kLayoutObjectVideo || LayoutMedia::IsOfType(type);
+    return true;
   }
 
   void PaintReplaced(const PaintInfo&,
                      const PhysicalOffset& paint_offset) const override;
 
-  void UpdateLayout() override;
-
-  LayoutUnit MinimumReplacedHeight() const override;
-
   bool CanHaveAdditionalCompositingReasons() const override {
     NOT_DESTROYED();
-    return RuntimeEnabledFeatures::CompositeVideoElementEnabled();
+    return true;
   }
   CompositingReasons AdditionalCompositingReasons() const override;
 
-  void UpdatePlayer(bool is_in_layout);
-
-  LayoutSize cached_image_size_;
+  PhysicalNaturalSizingInfo natural_dimensions_;
 };
 
 template <>

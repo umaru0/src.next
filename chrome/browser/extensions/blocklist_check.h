@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,9 @@
 #include "base/memory/weak_ptr.h"
 #include "extensions/browser/blocklist_state.h"
 #include "extensions/browser/preload_check.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
@@ -32,7 +35,7 @@ class BlocklistCheck : public PreloadCheck {
  private:
   void OnBlocklistedStateRetrieved(BlocklistState blocklist_state);
 
-  raw_ptr<Blocklist> blocklist_;
+  raw_ptr<Blocklist, DanglingUntriaged> blocklist_;
   ResultCallback callback_;
   base::WeakPtrFactory<BlocklistCheck> weak_ptr_factory_{this};
 };

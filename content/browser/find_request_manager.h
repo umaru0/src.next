@@ -1,10 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CONTENT_BROWSER_FIND_REQUEST_MANAGER_H_
 #define CONTENT_BROWSER_FIND_REQUEST_MANAGER_H_
 
+#include <cfloat>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,6 +13,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/containers/queue.h"
+#include "base/functional/function_ref.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -112,7 +114,7 @@ class FindRequestManager {
                              const gfx::RectF& active_rect);
 #endif
 
-  const std::unordered_set<RenderFrameHost*>
+  const std::unordered_set<raw_ptr<RenderFrameHost, CtnExperimental>>
   render_frame_hosts_pending_initial_reply_for_testing() const {
     return pending_initial_replies_;
   }
@@ -217,11 +219,10 @@ class FindRequestManager {
   std::unique_ptr<FindInPageClient> CreateFindInPageClient(
       RenderFrameHostImpl* rfh);
 
-  using FrameIterationCallback =
-      base::RepeatingCallback<void(RenderFrameHostImpl*)>;
   // Traverses all RenderFrameHosts added for find-in-page and invokes the
   // callback if the each RenderFrameHost is alive and active.
-  void ForEachAddedFindInPageRenderFrameHost(FrameIterationCallback callback);
+  void ForEachAddedFindInPageRenderFrameHost(
+      base::FunctionRef<void(RenderFrameHostImpl*)> func_ref);
 
   void EmitFindRequest(int request_id,
                        const std::u16string& search_text,
@@ -249,16 +250,15 @@ class FindRequestManager {
     raw_ptr<RenderFrameHostImpl> nearest_frame = nullptr;
 
     // Nearest find result replies are still pending for these frames.
-    std::unordered_set<RenderFrameHost*> pending_replies;
+    std::unordered_set<raw_ptr<RenderFrameHost, CtnExperimental>>
+        pending_replies;
 
     ActivateNearestFindResultState();
     ActivateNearestFindResultState(float x, float y);
     ~ActivateNearestFindResultState();
 
-    static int GetNextID() {
-      static int next_id = 0;
-      return next_id++;
-    }
+    static int GetNextID();
+
   } activate_;
 
   // Data for find match rects in a single frame.
@@ -295,7 +295,8 @@ class FindRequestManager {
     gfx::RectF active_rect;
 
     // Find match rects replies are still pending for these frames.
-    std::unordered_set<RenderFrameHost*> pending_replies;
+    std::unordered_set<raw_ptr<RenderFrameHost, CtnExperimental>>
+        pending_replies;
 
     FindMatchRectsState();
     ~FindMatchRectsState();
@@ -321,7 +322,8 @@ class FindRequestManager {
   // find request. Frames are removed from |pending_initial_replies_| when their
   // reply to the initial find request is received with |final_update| set to
   // true.
-  std::unordered_set<RenderFrameHost*> pending_initial_replies_;
+  std::unordered_set<raw_ptr<RenderFrameHost, CtnExperimental>>
+      pending_initial_replies_;
 
   // The frame (if any) that is still expected to reply to the last pending
   // "find next" request.
@@ -367,13 +369,6 @@ class FindRequestManager {
   // WebContentsObservers to observe frame changes in |contents_| and its inner
   // WebContentses.
   std::vector<std::unique_ptr<FrameObserver>> frame_observers_;
-
-  // last_time_typed_ and last_searched_text_ are used to measure how long the
-  // user takes between keystrokes.
-  // TODO(crbug.com/1250158): Remove these when we decide how long the
-  // find-in-page delay should be.
-  base::TimeTicks last_time_typed_;
-  std::u16string last_searched_text_;
 
   base::CancelableOnceClosure delayed_find_task_;
 

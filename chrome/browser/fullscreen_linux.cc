@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 #include "ui/views/widget/widget.h"
 
 bool IsFullScreenMode() {
-  std::vector<aura::Window*> all_windows =
+  aura::Window::Windows all_windows =
       views::DesktopWindowTreeHostLinux::GetAllOpenWindows();
   // Only the topmost window is checked. This works fine in the most cases, but
   // it may return false when there are multiple displays and one display has

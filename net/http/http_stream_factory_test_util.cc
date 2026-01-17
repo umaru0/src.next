@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,17 +20,17 @@ MockHttpStreamFactoryJob::MockHttpStreamFactoryJob(
     HttpStreamFactory::Job::Delegate* delegate,
     HttpStreamFactory::JobType job_type,
     HttpNetworkSession* session,
-    const HttpRequestInfo& request_info,
+    const HttpStreamFactory::StreamRequestInfo& request_info,
     RequestPriority priority,
     ProxyInfo proxy_info,
-    const SSLConfig& server_ssl_config,
-    const SSLConfig& proxy_ssl_config,
+    const std::vector<SSLConfig::CertAndStatus>& allowed_bad_certs,
     url::SchemeHostPort destination,
     GURL origin_url,
     NextProto alternative_protocol,
     quic::ParsedQuicVersion quic_version,
     bool is_websocket,
-    bool enable_ip_based_pooling,
+    bool enable_ip_based_pooling_for_h2,
+    std::optional<ConnectionManagementConfig> management_config,
     NetLog* net_log)
     : HttpStreamFactory::Job(delegate,
                              job_type,
@@ -38,14 +38,14 @@ MockHttpStreamFactoryJob::MockHttpStreamFactoryJob(
                              request_info,
                              priority,
                              proxy_info,
-                             server_ssl_config,
-                             proxy_ssl_config,
+                             allowed_bad_certs,
                              std::move(destination),
                              origin_url,
                              alternative_protocol,
                              quic_version,
                              is_websocket,
-                             enable_ip_based_pooling,
+                             enable_ip_based_pooling_for_h2,
+                             management_config,
                              net_log) {
   DCHECK(!is_waiting());
 }
@@ -64,24 +64,25 @@ std::unique_ptr<HttpStreamFactory::Job> TestJobFactory::CreateJob(
     HttpStreamFactory::Job::Delegate* delegate,
     HttpStreamFactory::JobType job_type,
     HttpNetworkSession* session,
-    const HttpRequestInfo& request_info,
+    const HttpStreamFactory::StreamRequestInfo& request_info,
     RequestPriority priority,
     const ProxyInfo& proxy_info,
-    const SSLConfig& server_ssl_config,
-    const SSLConfig& proxy_ssl_config,
+    const std::vector<SSLConfig::CertAndStatus>& allowed_bad_certs,
     url::SchemeHostPort destination,
     GURL origin_url,
     bool is_websocket,
-    bool enable_ip_based_pooling,
+    bool enable_ip_based_pooling_for_h2,
     NetLog* net_log,
-    NextProto alternative_protocol = kProtoUnknown,
+    NextProto alternative_protocol = NextProto::kProtoUnknown,
     quic::ParsedQuicVersion quic_version =
-        quic::ParsedQuicVersion::Unsupported()) {
+        quic::ParsedQuicVersion::Unsupported(),
+    std::optional<ConnectionManagementConfig> management_config =
+        std::nullopt) {
   auto job = std::make_unique<MockHttpStreamFactoryJob>(
       delegate, job_type, session, request_info, priority, proxy_info,
-      SSLConfig(), SSLConfig(), std::move(destination), origin_url,
-      alternative_protocol, quic_version, is_websocket, enable_ip_based_pooling,
-      net_log);
+      allowed_bad_certs, std::move(destination), origin_url,
+      alternative_protocol, quic_version, is_websocket,
+      enable_ip_based_pooling_for_h2, management_config, net_log);
 
   // Keep raw pointer to Job but pass ownership.
   switch (job_type) {

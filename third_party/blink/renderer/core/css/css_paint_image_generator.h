@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,7 +52,7 @@ class CORE_EXPORT CSSPaintImageGenerator
   // The |container_size| is the container size with subpixel snapping.
   virtual scoped_refptr<Image> Paint(const ImageResourceObserver&,
                                      const gfx::SizeF& container_size,
-                                     const CSSStyleValueVector*) = 0;
+                                     const GCedCSSStyleValueVector*) = 0;
 
   virtual const Vector<CSSPropertyID>& NativeInvalidationProperties() const = 0;
   virtual const Vector<AtomicString>& CustomInvalidationProperties() const = 0;

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,8 @@ namespace android {
 // Utils to help working with android app bundles.
 class BASE_EXPORT BundleUtils {
  public:
-  // Returns true if the current build is a bundle.
-  static bool IsBundle();
+  // Returns whether there are any splits installed (including config splits).
+  static bool HasAnyInstalledSplits();
 
   // Helper function asking Java to resolve a library path. This is required for
   // resolving a module library made available via SplitCompat, rather than in

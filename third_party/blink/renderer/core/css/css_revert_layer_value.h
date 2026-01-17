@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@ class CORE_EXPORT CSSRevertLayerValue : public CSSValue {
   explicit CSSRevertLayerValue(base::PassKey<CSSValuePool>)
       : CSSValue(kRevertLayerClass) {}
 
-  String CustomCSSText() const;
+  WTF::String CustomCSSText() const;
 
   bool Equals(const CSSRevertLayerValue&) const { return true; }
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@ class CORE_EXPORT CSSUnsetValue : public CSSValue {
 
   explicit CSSUnsetValue(base::PassKey<CSSValuePool>) : CSSValue(kUnsetClass) {}
 
-  String CustomCSSText() const;
+  WTF::String CustomCSSText() const;
 
   bool Equals(const CSSUnsetValue&) const { return true; }
 

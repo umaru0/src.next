@@ -1,8 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "extensions/browser/mock_screen.h"
+
+#include "ui/gfx/native_widget_types.h"
 
 namespace extensions {
 
@@ -27,13 +29,13 @@ bool MockScreen::IsWindowUnderCursor(gfx::NativeWindow window) {
 }
 
 gfx::NativeWindow MockScreen::GetWindowAtScreenPoint(const gfx::Point& point) {
-  return nullptr;
+  return gfx::NativeWindow();
 }
 
 gfx::NativeWindow MockScreen::GetLocalProcessWindowAtPoint(
     const gfx::Point& point,
     const std::set<gfx::NativeWindow>& ignore) {
-  return nullptr;
+  return gfx::NativeWindow();
 }
 
 int MockScreen::GetNumDisplays() const {

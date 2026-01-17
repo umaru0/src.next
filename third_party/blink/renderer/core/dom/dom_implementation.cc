@@ -25,10 +25,10 @@
 
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 
+#include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/media_list.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
-#include "third_party/blink/renderer/core/dom/context_features.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/document_type.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -48,6 +48,22 @@
 
 namespace blink {
 
+namespace {
+template <typename CharType>
+bool IsValidDoctypeName(const base::span<const CharType>& characters) {
+  // https://github.com/whatwg/dom/pull/1079
+  // A string is a valid doctype name if it does not contain ASCII whitespace,
+  // U+0000 NULL, or U+003E (>).
+  for (unsigned i = 0; i < characters.size(); i++) {
+    if (!characters[i] || characters[i] == '>' ||
+        IsASCIISpaceWHATWG(characters[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+}  // namespace
+
 DOMImplementation::DOMImplementation(Document& document)
     : document_(document) {}
 
@@ -57,9 +73,23 @@ DocumentType* DOMImplementation::createDocumentType(
     const String& system_id,
     ExceptionState& exception_state) {
   AtomicString prefix, local_name;
-  if (!Document::ParseQualifiedName(qualified_name, prefix, local_name,
-                                    exception_state))
+  if (RuntimeEnabledFeatures::RelaxDOMValidNamesEnabled()) {
+    if (!VisitCharacters(qualified_name, [](auto chars) {
+          return IsValidDoctypeName(chars);
+        })) {
+      StringBuilder message;
+      message.Append("The provided doctype name ('");
+      message.Append(qualified_name);
+      message.Append("') contains an invalid character.");
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kInvalidCharacterError, message.ReleaseString());
+      return nullptr;
+    }
+  } else if (!Document::ParseQualifiedName(
+                 qualified_name, prefix, local_name, exception_state,
+                 Document::QualifiedNameParsingMode::kParsingAttribute)) {
     return nullptr;
+  }
   if (!document_->GetExecutionContext())
     return nullptr;
 
@@ -74,7 +104,9 @@ XMLDocument* DOMImplementation::createDocument(
     ExceptionState& exception_state) {
   XMLDocument* doc = nullptr;
   ExecutionContext* context = document_->GetExecutionContext();
-  DocumentInit init = DocumentInit::Create().WithExecutionContext(context);
+  DocumentInit init =
+      DocumentInit::Create().WithExecutionContext(context).WithAgent(
+          document_->GetAgent());
   if (namespace_uri == svg_names::kNamespaceURI) {
     doc = XMLDocument::CreateSVG(init);
   } else if (namespace_uri == html_names::xhtmlNamespaceURI) {
@@ -83,10 +115,8 @@ XMLDocument* DOMImplementation::createDocument(
     doc = MakeGarbageCollected<XMLDocument>(init);
   }
 
-  doc->SetContextFeatures(document_->GetContextFeatures());
-
   Node* document_element = nullptr;
-  if (!qualified_name.IsEmpty()) {
+  if (!qualified_name.empty()) {
     document_element =
         doc->createElementNS(namespace_uri, qualified_name, exception_state);
     if (exception_state.HadException())
@@ -102,8 +132,11 @@ XMLDocument* DOMImplementation::createDocument(
 }
 
 Document* DOMImplementation::createHTMLDocument(const String& title) {
-  DocumentInit init = DocumentInit::Create().WithExecutionContext(
-      document_->GetExecutionContext());
+  TRACE_EVENT("blink", "DOMImplementation::createHTMLDocument");
+  DocumentInit init =
+      DocumentInit::Create()
+          .WithExecutionContext(document_->GetExecutionContext())
+          .WithAgent(document_->GetAgent());
   auto* d = MakeGarbageCollected<HTMLDocument>(init);
   d->setAllowDeclarativeShadowRoots(false);
   d->open();
@@ -115,7 +148,6 @@ Document* DOMImplementation::createHTMLDocument(const String& title) {
     head_element->AppendChild(title_element);
     title_element->AppendChild(d->createTextNode(title), ASSERT_NO_EXCEPTION);
   }
-  d->SetContextFeatures(document_->GetContextFeatures());
   return d;
 }
 

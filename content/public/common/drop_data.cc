@@ -1,9 +1,10 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/public/common/drop_data.h"
 
+#include "base/pickle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/base/filename_util.h"
@@ -11,11 +12,9 @@
 
 namespace content {
 
-DropData::Metadata::Metadata() {}
-
 // static
 DropData::Metadata DropData::Metadata::CreateForMimeType(
-    const Kind& kind,
+    Kind kind,
     const std::u16string& mime_type) {
   Metadata metadata;
   metadata.kind = kind;
@@ -25,10 +24,12 @@ DropData::Metadata DropData::Metadata::CreateForMimeType(
 
 // static
 DropData::Metadata DropData::Metadata::CreateForFilePath(
-    const base::FilePath& filename) {
+    const base::FilePath& filename,
+    const base::FilePath& display_name) {
   Metadata metadata;
   metadata.kind = Kind::FILENAME;
   metadata.filename = filename;
+  metadata.display_name = display_name;
   return metadata;
 }
 
@@ -50,26 +51,22 @@ DropData::Metadata DropData::Metadata::CreateForBinary(
   return metadata;
 }
 
+DropData::Metadata::Metadata() = default;
 DropData::Metadata::Metadata(const DropData::Metadata& other) = default;
+DropData::Metadata::~Metadata() = default;
 
-DropData::Metadata::~Metadata() {}
-
-DropData::DropData()
-    : did_originate_from_renderer(false),
-      referrer_policy(network::mojom::ReferrerPolicy::kDefault) {}
-
+DropData::DropData() = default;
 DropData::DropData(const DropData& other) = default;
+DropData::~DropData() = default;
 
-DropData::~DropData() {}
-
-absl::optional<base::FilePath> DropData::GetSafeFilenameForImageFileContents()
+std::optional<base::FilePath> DropData::GetSafeFilenameForImageFileContents()
     const {
   base::FilePath file_name = net::GenerateFileName(
       file_contents_source_url, file_contents_content_disposition,
-      std::string(),   // referrer_charset
-      std::string(),   // suggested_name
-      std::string(),   // mime_type
-      std::string());  // default_name
+      /*referrer_charset=*/std::string(),
+      /*suggested_name=*/std::string(),
+      /*mime_type=*/std::string(),
+      /*default_name=*/std::string());
   std::string mime_type;
   if (net::GetWellKnownMimeTypeFromExtension(file_contents_filename_extension,
                                              &mime_type) &&
@@ -77,7 +74,7 @@ absl::optional<base::FilePath> DropData::GetSafeFilenameForImageFileContents()
                        base::CompareCase::INSENSITIVE_ASCII)) {
     return file_name.ReplaceExtension(file_contents_filename_extension);
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // static

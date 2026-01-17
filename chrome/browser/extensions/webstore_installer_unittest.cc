@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,13 +38,13 @@ TEST(WebstoreInstallerTest, PlatformParams) {
       StringPrintf("os_arch=%s",
                    base::SysInfo().OperatingSystemArchitecture().c_str())));
   EXPECT_TRUE(Contains(
-      query, StringPrintf("nacl_arch=%s", UpdateQueryParams::GetNaclArch())));
-  EXPECT_TRUE(Contains(
       query, base::EscapeQueryParamValue(
                  StringPrintf("installsource=%s", source.c_str()), true)));
   EXPECT_TRUE(Contains(
       query,
       StringPrintf("lang=%s", ChromeUpdateQueryParamsDelegate::GetLang())));
+  // Information about NaCl architecture is omitted following NaCl removal
+  EXPECT_FALSE(Contains(query, "nacl_arch"));
 }
 
 }  // namespace extensions

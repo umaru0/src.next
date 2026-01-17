@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -32,17 +33,19 @@ CustomLinksStore::CustomLinksStore(PrefService* prefs) : prefs_(prefs) {
 CustomLinksStore::~CustomLinksStore() = default;
 
 std::vector<CustomLinksManager::Link> CustomLinksStore::RetrieveLinks() {
+  static bool has_recorded_first_load_stats = false;
+
   std::vector<CustomLinksManager::Link> links;
 
   const base::Value::List& stored_links =
-      prefs_->GetValueList(prefs::kCustomLinksList);
+      prefs_->GetList(prefs::kCustomLinksList);
 
   for (const base::Value& link : stored_links) {
     const std::string* url_string =
         link.GetDict().FindString(kDictionaryKeyUrl);
     const std::string* title_string =
         link.GetDict().FindString(kDictionaryKeyTitle);
-    const absl::optional<bool> mv_value =
+    const std::optional<bool> mv_value =
         link.GetDict().FindBool(kDictionaryKeyIsMostVisited);
 
     GURL url = GURL(url_string ? *url_string : std::string());
@@ -57,6 +60,13 @@ std::vector<CustomLinksManager::Link> CustomLinksStore::RetrieveLinks() {
     links.emplace_back(CustomLinksManager::Link{
         std::move(url), base::UTF8ToUTF16(*title_string), is_most_visited});
   }
+
+  if (!has_recorded_first_load_stats) {
+    has_recorded_first_load_stats = true;
+    ntp_tiles::metrics::RecordNumberOfCustomTilesOnFirstNtp(
+        static_cast<int>(links.size()));
+  }
+
   return links;
 }
 

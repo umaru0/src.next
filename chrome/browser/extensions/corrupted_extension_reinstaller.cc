@@ -1,15 +1,16 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/corrupted_extension_reinstaller.h"
 
-#include "base/bind.h"
+#include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/extensions/extension_service.h"
+#include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/extensions/corrupted_extension_reinstaller_factory.h"
+#include "chrome/browser/extensions/external_provider_manager.h"
 #include "content/public/browser/browser_context.h"
-#include "extensions/browser/extension_system.h"
 
 namespace extensions {
 
@@ -44,11 +45,18 @@ const net::BackoffEntry::Policy kCorruptedReinstallBackoffPolicy = {
 
 }  // namespace
 
+// static
+CorruptedExtensionReinstaller* CorruptedExtensionReinstaller::Get(
+    content::BrowserContext* context) {
+  return CorruptedExtensionReinstallerFactory::GetInstance()
+      ->GetForBrowserContext(context);
+}
+
 CorruptedExtensionReinstaller::CorruptedExtensionReinstaller(
     content::BrowserContext* context)
     : context_(context), backoff_entry_(&kCorruptedReinstallBackoffPolicy) {}
 
-CorruptedExtensionReinstaller::~CorruptedExtensionReinstaller() {}
+CorruptedExtensionReinstaller::~CorruptedExtensionReinstaller() = default;
 
 // static
 void CorruptedExtensionReinstaller::set_reinstall_action_for_test(
@@ -64,7 +72,7 @@ void CorruptedExtensionReinstaller::RecordPolicyReinstallReason(
 
 void CorruptedExtensionReinstaller::ExpectReinstallForCorruption(
     const ExtensionId& id,
-    absl::optional<PolicyReinstallReason> reason_for_uma,
+    std::optional<PolicyReinstallReason> reason_for_uma,
     mojom::ManifestLocation manifest_location_for_uma) {
   if (base::Contains(expected_reinstalls_, id))
     return;
@@ -104,20 +112,18 @@ void CorruptedExtensionReinstaller::NotifyExtensionDisabledDueToCorruption() {
 }
 
 void CorruptedExtensionReinstaller::Shutdown() {
-  // Cancel already scheduled attempts by invalidating weak pointers stored in
-  // postponed tasks.
+  // Cancels already-scheduled attempts, if any, for a smoother shutdown, by
+  // invalidating weak pointers stored in postponed tasks.
   weak_factory_.InvalidateWeakPtrs();
 }
 
 void CorruptedExtensionReinstaller::Fire() {
   scheduled_fire_pending_ = false;
-  ExtensionSystem* system = ExtensionSystem::Get(context_);
-  ExtensionService* service = system->extension_service();
   // If there's nothing to repair, then bail out.
   if (!HasAnyReinstallForCorruption())
     return;
 
-  service->CheckForExternalUpdates();
+  ExternalProviderManager::Get(context_)->CheckForExternalUpdates();
   ScheduleNextReinstallAttempt();
 }
 
@@ -137,7 +143,7 @@ void CorruptedExtensionReinstaller::ScheduleNextReinstallAttempt() {
   if (g_reinstall_action_for_test) {
     g_reinstall_action_for_test->Run(std::move(callback), reinstall_delay);
   } else {
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, std::move(callback), reinstall_delay);
   }
 }

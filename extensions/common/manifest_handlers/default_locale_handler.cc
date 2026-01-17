@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,11 +31,8 @@ const std::string& LocaleInfo::GetDefaultLocale(const Extension* extension) {
   return info ? info->default_locale : base::EmptyString();
 }
 
-DefaultLocaleHandler::DefaultLocaleHandler() {
-}
-
-DefaultLocaleHandler::~DefaultLocaleHandler() {
-}
+DefaultLocaleHandler::DefaultLocaleHandler() = default;
+DefaultLocaleHandler::~DefaultLocaleHandler() = default;
 
 bool DefaultLocaleHandler::Parse(Extension* extension, std::u16string* error) {
   std::unique_ptr<LocaleInfo> info(new LocaleInfo);
@@ -54,18 +51,19 @@ bool DefaultLocaleHandler::Parse(Extension* extension, std::u16string* error) {
 }
 
 bool DefaultLocaleHandler::Validate(
-    const Extension* extension,
+    const Extension& extension,
     std::string* error,
     std::vector<InstallWarning>* warnings) const {
   // default_locale and _locales have to be both present or both missing.
-  const base::FilePath path = extension->path().Append(kLocaleFolder);
+  const base::FilePath path = extension.path().Append(kLocaleFolder);
   bool path_exists = base::PathExists(path);
   std::string default_locale =
-      extensions::LocaleInfo::GetDefaultLocale(extension);
+      extensions::LocaleInfo::GetDefaultLocale(&extension);
 
   // If both default locale and _locales folder are empty, skip verification.
-  if (default_locale.empty() && !path_exists)
+  if (default_locale.empty() && !path_exists) {
     return true;
+  }
 
   if (default_locale.empty() && path_exists) {
     *error = l10n_util::GetStringUTF8(
@@ -86,16 +84,14 @@ bool DefaultLocaleHandler::Validate(
 
   bool gzipped_messages_allowed =
       extension_l10n_util::GetGzippedMessagesPermissionForLocation(
-          extension->location()) ==
+          extension.location()) ==
       extension_l10n_util::GzippedMessagesPermission::kAllowForTrustedSource;
 
   base::FilePath locale_path;
   while (!(locale_path = locales.Next()).empty()) {
-#if 0
     if (extension_l10n_util::ShouldSkipValidation(path, locale_path,
                                                   all_locales))
       continue;
-#endif
 
     base::FilePath messages_path = locale_path.Append(kMessagesFilename);
     base::FilePath gzipped_messages_path =
@@ -112,8 +108,9 @@ bool DefaultLocaleHandler::Validate(
       return false;
     }
 
-    if (locale_path == default_locale_path)
+    if (locale_path == default_locale_path) {
       has_default_locale_message_file = true;
+    }
   }
 
   // Only message file for default locale has to exist.

@@ -1,9 +1,10 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/base/url_util.h"
 
+#include <optional>
 #include <ostream>
 
 #include "base/format_macros.h"
@@ -36,8 +37,8 @@ TEST(UrlUtilTest, AppendQueryParameter) {
   // unsafe characters should be escaped.
   EXPECT_EQ("http://example.com/path?existing=one&na+me=v.alue%3D",
             AppendQueryParameter(GURL("http://example.com/path?existing=one"),
-                                 "na me", "v.alue=").spec());
-
+                                 "na me", "v.alue=")
+                .spec());
 }
 
 TEST(UrlUtilTest, AppendOrReplaceQueryParameter) {
@@ -80,7 +81,7 @@ TEST(UrlUtilTest, AppendOrReplaceQueryParameter) {
           GURL("http://example.com/path?name=old&existing=one&name=old"),
           "name", "new").spec());
 
-  // Preserve the content of the original params regarless of our failure to
+  // Preserve the content of the original params regardless of our failure to
   // interpret them correctly.
   EXPECT_EQ("http://example.com/path?bar&name=new&left=&"
             "=right&=&&name=again",
@@ -88,6 +89,112 @@ TEST(UrlUtilTest, AppendOrReplaceQueryParameter) {
           GURL("http://example.com/path?bar&name=old&left=&"
                 "=right&=&&name=again"),
           "name", "new").spec());
+
+  // ----- Removing the key using nullopt value -----
+
+  // Removes the name-value pair from the URL preserving other query parameters.
+  EXPECT_EQ("http://example.com/path?abc=xyz",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/path?name=value&abc=xyz"), "name",
+                std::nullopt)
+                .spec());
+
+  // Removes the name-value pair from the URL.
+  EXPECT_EQ("http://example.com/path?",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/path?existing=one"), "existing",
+                std::nullopt)
+                .spec());
+
+  // Removes the first name-value pair.
+  EXPECT_EQ("http://example.com/path?c=d&e=f",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/path?a=b&c=d&e=f"), "a", std::nullopt)
+                .spec());
+
+  // Removes a name-value pair in between two query params.
+  EXPECT_EQ(
+      "http://example.com/path?existing=one&hello=world",
+      AppendOrReplaceQueryParameter(
+          GURL("http://example.com/path?existing=one&replace=sure&hello=world"),
+          "replace", std::nullopt)
+          .spec());
+
+  // Removes the last name-value pair.
+  EXPECT_EQ("http://example.com/path?existing=one",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/path?existing=one&replace=sure"),
+                "replace", std::nullopt)
+                .spec());
+
+  // Removing a name-value pair with unsafe characters included. The
+  // unsafe characters should be escaped.
+  EXPECT_EQ("http://example.com/path?existing=one&hello=world",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/"
+                     "path?existing=one&na+me=v.alue%3D&hello=world"),
+                "na me", std::nullopt)
+                .spec());
+
+  // Does nothing if the provided query param key does not exist.
+  EXPECT_EQ("http://example.com/path?existing=one&name=old",
+            AppendOrReplaceQueryParameter(
+                GURL("http://example.com/path?existing=one&name=old"), "old",
+                std::nullopt)
+                .spec());
+
+  // Remove the value of first parameter with this name only.
+  EXPECT_EQ(
+      "http://example.com/path?existing=one&name=old",
+      AppendOrReplaceQueryParameter(
+          GURL("http://example.com/path?name=something&existing=one&name=old"),
+          "name", std::nullopt)
+          .spec());
+
+  // Preserve the content of the original params regardless of our failure to
+  // interpret them correctly.
+  EXPECT_EQ(
+      "http://example.com/path?bar&left=&"
+      "=right&=&&name=again",
+      AppendOrReplaceQueryParameter(
+          GURL("http://example.com/path?bar&name=old&left=&"
+               "=right&=&&name=again"),
+          "name", std::nullopt)
+          .spec());
+}
+
+TEST(UrlUtilTest, AppendOrReplaceRef) {
+  // Setting a new ref should append it.
+  EXPECT_EQ("http://example.com/path#ref",
+            AppendOrReplaceRef(GURL("http://example.com/path"), "ref").spec());
+
+  // Setting a ref over an existing one should replace it.
+  EXPECT_EQ("http://example.com/path#ref",
+            AppendOrReplaceRef(GURL("http://example.com/path#old_ref"), "ref")
+                .spec());
+
+  // Setting a ref on a url with existing query parameters should simply append
+  // it at the end
+  EXPECT_EQ(
+      "http://example.com/path?query=value#ref",
+      AppendOrReplaceRef(GURL("http://example.com/path?query=value#ref"), "ref")
+          .spec());
+
+  // Setting a ref on a url with existing query parameters and with special
+  // encoded characters: `special-chars?query=value#ref chars%\";'`
+  EXPECT_EQ(
+      "http://example.com/special-chars?query=value#ref%20chars%%22;'",
+      AppendOrReplaceRef(GURL("http://example.com/special-chars?query=value"),
+                         "ref chars%\";'")
+          .spec());
+
+  // Testing adding a ref to a URL with specially encoded characters.
+  // `special chars%\";'?query=value#ref`
+  EXPECT_EQ(
+      "http://example.com/special%20chars%%22;'?query=value#ref",
+      AppendOrReplaceRef(
+          GURL("http://example.com/special chars%\";'?query=value"), "ref")
+          .spec());
 }
 
 TEST(UrlUtilTest, GetValueForKeyInQuery) {
@@ -115,6 +222,20 @@ TEST(UrlUtilTest, GetValueForKeyInQueryInvalidURL) {
 
   // Always false when parsing an invalid URL.
   EXPECT_FALSE(GetValueForKeyInQuery(url, "test", &value));
+}
+
+TEST(UrlUtilTest, GetValueForKeyInQueryNoOutputValue) {
+  GURL url(
+      "http://example.com/path?name=value&boolParam&"
+      "url=http://test.com/q?n1%3Dv1%26n2");
+
+  // False when getting a non-existent query param.
+  EXPECT_FALSE(GetValueForKeyInQuery(url, "non-exist", nullptr));
+
+  // True when query param exists.
+  EXPECT_TRUE(GetValueForKeyInQuery(url, "name", nullptr));
+  EXPECT_TRUE(GetValueForKeyInQuery(url, "boolParam", nullptr));
+  EXPECT_TRUE(GetValueForKeyInQuery(url, "url", nullptr));
 }
 
 TEST(UrlUtilTest, ParseQuery) {
@@ -346,6 +467,7 @@ TEST(UrlUtilTest, CompliantHost) {
       {"9a", true},
       {"9_", true},
       {"a.", true},
+      {".a", false},
       {"a.a", true},
       {"9.a", true},
       {"a.9", true},
@@ -362,12 +484,64 @@ TEST(UrlUtilTest, CompliantHost) {
       {"1-2.a_b", true},
       {"a.b.c.d.e", true},
       {"1.2.3.4.5", true},
+      {"1.2.3..4.5", false},
       {"1.2.3.4.5.", true},
+      {"1.2.3.4.5..", false},
+      {"%20%20noodles.blorg", false},
+      {"noo dles.blorg ", false},
+      {"noo dles.blorg. ", false},
+      {"^noodles.blorg", false},
+      {"noodles^.blorg", false},
+      {"noo&dles.blorg", false},
+      {"noodles.blorg`", false},
+      {"www.noodles.blorg", true},
+      {"1www.noodles.blorg", true},
+      {"www.2noodles.blorg", true},
+      {"www.n--oodles.blorg", true},
+      {"www.noodl_es.blorg", true},
+      {"www.no-_odles.blorg", true},
+      {"www_.noodles.blorg", true},
+      {"www.noodles.blorg.", true},
+      {"_privet._tcp.local", true},
+      // 63-char label (before or without dot) allowed
+      {"z23456789a123456789a123456789a123456789a123456789a123456789a123", true},
+      {"z23456789a123456789a123456789a123456789a123456789a123456789a123.",
+       true},
+      // 64-char label (before or without dot) disallowed
+      {"123456789a123456789a123456789a123456789a123456789a123456789a1234",
+       false},
+      {"123456789a123456789a123456789a123456789a123456789a123456789a1234.",
+       false},
+      // 253-char host allowed
+      {"abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abc",
+       true},
+      // 253-char+dot host allowed
+      {"abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi.abcdefghi."
+       "abcdefghi.abcdefghi.abcdefghi.abcdefghi.abc.",
+       true},
+      // 254-char host disallowed
+      {"123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.1234",
+       false},
+      // 254-char+dot host disallowed
+      {"123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.123456789.123456789.123456789."
+       "123456789.123456789.123456789.123456789.1234.",
+       false},
   };
 
   for (const auto& compliant_host : compliant_host_cases) {
     EXPECT_EQ(compliant_host.expected_output,
-              IsCanonicalizedHostCompliant(compliant_host.host));
+              IsCanonicalizedHostCompliant(compliant_host.host))
+        << compliant_host.host;
   }
 }
 
@@ -384,47 +558,57 @@ void PrintTo(const NonUniqueNameTestData& data, std::ostream* os) {
 }
 
 const NonUniqueNameTestData kNonUniqueNameTestData[] = {
+    // eTLDs
+    {true, "com"},
+    {true, "com."},
+    {true, ".com"},
+    {true, "co.uk"},
+    {true, "co.uk."},
+    {true, ".co.uk"},
+    {false, "notarealtld"},
+    {false, ".notarealtld"},
+    {false, "notarealtld."},
     // Domains under ICANN-assigned domains.
-    { true, "google.com" },
-    { true, "google.co.uk" },
+    {true, "google.com"},
+    {true, "google.co.uk"},
     // Domains under private registries.
-    { true, "appspot.com" },
-    { true, "test.appspot.com" },
+    {true, "appspot.com"},
+    {true, "test.appspot.com"},
     // Unreserved IPv4 addresses (in various forms).
-    { true, "8.8.8.8" },
-    { true, "99.64.0.0" },
-    { true, "212.15.0.0" },
-    { true, "212.15" },
-    { true, "212.15.0" },
-    { true, "3557752832" },
+    {true, "8.8.8.8"},
+    {true, "99.64.0.0"},
+    {true, "212.15.0.0"},
+    {true, "212.15"},
+    {true, "212.15.0"},
+    {true, "3557752832"},
     // Reserved IPv4 addresses (in various forms).
-    { false, "192.168.0.0" },
-    { false, "192.168.0.6" },
-    { false, "10.0.0.5" },
-    { false, "10.0" },
-    { false, "10.0.0" },
-    { false, "3232235526" },
+    {false, "192.168.0.0"},
+    {false, "192.168.0.6"},
+    {false, "10.0.0.5"},
+    {false, "10.0"},
+    {false, "10.0.0"},
+    {false, "3232235526"},
     // Unreserved IPv6 addresses.
-    { true, "FFC0:ba98:7654:3210:FEDC:BA98:7654:3210" },
-    { true, "2000:ba98:7654:2301:EFCD:BA98:7654:3210" },
+    {true, "FFC0:ba98:7654:3210:FEDC:BA98:7654:3210"},
+    {true, "2000:ba98:7654:2301:EFCD:BA98:7654:3210"},
     // Reserved IPv6 addresses.
-    { false, "::192.9.5.5" },
-    { false, "FEED::BEEF" },
-    { false, "FEC0:ba98:7654:3210:FEDC:BA98:7654:3210" },
+    {false, "::192.9.5.5"},
+    {false, "FEED::BEEF"},
+    {false, "FEC0:ba98:7654:3210:FEDC:BA98:7654:3210"},
     // 'internal'/non-IANA assigned domains.
-    { false, "intranet" },
-    { false, "intranet." },
-    { false, "intranet.example" },
-    { false, "host.intranet.example" },
+    {false, "intranet"},
+    {false, "intranet."},
+    {false, "intranet.example"},
+    {false, "host.intranet.example"},
     // gTLDs under discussion, but not yet assigned.
-    { false, "intranet.corp" },
-    { false, "intranet.internal" },
+    {false, "intranet.corp"},
+    {false, "intranet.internal"},
     // Invalid host names are treated as unique - but expected to be
     // filtered out before then.
-    { true, "junk)(£)$*!@~#" },
-    { true, "w$w.example.com" },
-    { true, "nocolonsallowed:example" },
-    { true, "[::4.5.6.9]" },
+    {true, "junk)(£)$*!@~#"},
+    {true, "w$w.example.com"},
+    {true, "nocolonsallowed:example"},
+    {true, "[::4.5.6.9]"},
 };
 
 class UrlUtilNonUniqueNameTest
@@ -505,36 +689,43 @@ TEST(UrlUtilTest, SimplifyUrlForRequest) {
     const char* const input_url;
     const char* const expected_simplified_url;
   } tests[] = {
-    {
-      // Reference section should be stripped.
-      "http://www.google.com:78/foobar?query=1#hash",
-      "http://www.google.com:78/foobar?query=1",
-    },
-    {
-      // Reference section can itself contain #.
-      "http://192.168.0.1?query=1#hash#10#11#13#14",
-      "http://192.168.0.1?query=1",
-    },
-    { // Strip username/password.
-      "http://user:pass@google.com",
-      "http://google.com/",
-    },
-    { // Strip both the reference and the username/password.
-      "http://user:pass@google.com:80/sup?yo#X#X",
-      "http://google.com/sup?yo",
-    },
-    { // Try an HTTPS URL -- strip both the reference and the username/password.
-      "https://user:pass@google.com:80/sup?yo#X#X",
-      "https://google.com:80/sup?yo",
-    },
-    { // Try an FTP URL -- strip both the reference and the username/password.
-      "ftp://user:pass@google.com:80/sup?yo#X#X",
-      "ftp://google.com:80/sup?yo",
-    },
-    { // Try a nonstandard URL
-      "foobar://user:pass@google.com:80/sup?yo#X#X",
-      "foobar://user:pass@google.com:80/sup?yo",
-    },
+      {
+          // Reference section should be stripped.
+          "http://www.google.com:78/foobar?query=1#hash",
+          "http://www.google.com:78/foobar?query=1",
+      },
+      {
+          // Reference section can itself contain #.
+          "http://192.168.0.1?query=1#hash#10#11#13#14",
+          "http://192.168.0.1?query=1",
+      },
+      {
+          // Strip username/password.
+          "http://user:pass@google.com",
+          "http://google.com/",
+      },
+      {
+          // Strip both the reference and the username/password.
+          "http://user:pass@google.com:80/sup?yo#X#X",
+          "http://google.com/sup?yo",
+      },
+      {
+          // Try an HTTPS URL -- strip both the reference and the
+          // username/password.
+          "https://user:pass@google.com:80/sup?yo#X#X",
+          "https://google.com:80/sup?yo",
+      },
+      {
+          // Try an FTP URL -- strip both the reference and the
+          // username/password.
+          "ftp://user:pass@google.com:80/sup?yo#X#X",
+          "ftp://google.com:80/sup?yo",
+      },
+      {
+          // Try a non-special URL.
+          "foobar://user:pass@google.com:80/sup?yo#X#X",
+          "foobar://google.com:80/sup?yo",
+      },
   };
   for (const auto& test : tests) {
     SCOPED_TRACE(test.input_url);
@@ -579,7 +770,6 @@ TEST(UrlUtilTest, SchemeHasNetworkHost) {
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kHttpsScheme));
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kWsScheme));
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kWssScheme));
-  EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kQuicTransportScheme));
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kFtpScheme));
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(url::kFileScheme));
   EXPECT_TRUE(IsStandardSchemeWithNetworkHost(
@@ -590,6 +780,42 @@ TEST(UrlUtilTest, SchemeHasNetworkHost) {
   EXPECT_FALSE(IsStandardSchemeWithNetworkHost(kCustomSchemeWithHost));
   EXPECT_FALSE(IsStandardSchemeWithNetworkHost(kCustomSchemeWithoutAuthority));
   EXPECT_FALSE(IsStandardSchemeWithNetworkHost(kNonStandardScheme));
+}
+
+TEST(UrlUtilTest, GetOriginRelation) {
+  using enum OriginRelation;
+
+  const url::Origin kExampleOrigin =
+      url::Origin::Create(GURL("https://example.test"));
+  EXPECT_EQ(GetOriginRelation(kExampleOrigin, kExampleOrigin), kSameOrigin);
+
+  EXPECT_EQ(GetOriginRelation(
+                kExampleOrigin,
+                url::Origin::Create(GURL("https://other.example.test"))),
+            kSameSite);
+
+  EXPECT_EQ(
+      GetOriginRelation(kExampleOrigin,
+                        url::Origin::Create(GURL("https://cross-site.test"))),
+      kCrossSite);
+
+  // Same-site rules about schemes are followed.
+  const url::Origin cross_scheme_origin =
+      url::Origin::Create(GURL("http://example.test"));
+  EXPECT_EQ(GetOriginRelation(kExampleOrigin, cross_scheme_origin), kCrossSite);
+
+  // Same-site rules about opaque origins are followed.
+  EXPECT_EQ(
+      GetOriginRelation(kExampleOrigin, kExampleOrigin.DeriveNewOpaqueOrigin()),
+      kCrossSite);
+
+  // Cross-port origins are same-site.
+  EXPECT_EQ(
+      GetOriginRelation(kExampleOrigin,
+                        url::Origin::CreateFromNormalizedTuple(
+                            kExampleOrigin.scheme(), kExampleOrigin.host(),
+                            kExampleOrigin.port() + 1)),
+      kSameSite);
 }
 
 TEST(UrlUtilTest, GetIdentityFromURL) {
@@ -728,6 +954,40 @@ TEST(UrlUtilTest, GoogleHost) {
 
   for (const auto& host : google_host_cases) {
     EXPECT_EQ(host.expected_output, HasGoogleHost(host.url));
+  }
+}
+
+TEST(UrlUtilTest, IsLocalHostname) {
+  EXPECT_TRUE(IsLocalHostname("localhost"));
+  EXPECT_TRUE(IsLocalHostname("localhost."));
+  EXPECT_TRUE(IsLocalHostname("LOCALhost"));
+  EXPECT_TRUE(IsLocalHostname("LOCALhost."));
+  EXPECT_TRUE(IsLocalHostname("abc.localhost"));
+  EXPECT_TRUE(IsLocalHostname("abc.localhost."));
+  EXPECT_TRUE(IsLocalHostname("abc.LOCALhost"));
+  EXPECT_TRUE(IsLocalHostname("abc.LOCALhost."));
+  EXPECT_TRUE(IsLocalHostname("abc.def.localhost"));
+
+  EXPECT_FALSE(IsLocalHostname("localhost.actuallynot"));
+  EXPECT_FALSE(IsLocalHostname("notlocalhost"));
+  EXPECT_FALSE(IsLocalHostname("notlocalhost."));
+  EXPECT_FALSE(IsLocalHostname("still.notlocalhost"));
+  EXPECT_FALSE(IsLocalHostname("localhostjustkidding"));
+}
+
+TEST(UrlUtilTest, GoogleHostWithAlpnH3) {
+  struct {
+    std::string_view host;
+    bool expected_output;
+  } test_cases[] = {
+      {"google.com", true},        {"www.google.com", true},
+      {"google.CoM", true},        {"www.Google.cOm", true},
+      {"www.google.cat", false},   {"www.google.co.in", false},
+      {"www.google.co.jp", false},
+  };
+
+  for (const auto& host : test_cases) {
+    EXPECT_EQ(host.expected_output, IsGoogleHostWithAlpnH3(host.host));
   }
 }
 

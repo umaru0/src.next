@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2021 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2021 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -55,7 +57,7 @@
 
     <View
         android:id="@+id/divider"
-        android:background="@macro/divider_line_bg_color"
+        android:background="@drawable/divider_line_bg"
         android:layout_above="@id/footer"
         android:layout_height="1dp"
         android:layout_width="match_parent"/>
@@ -115,7 +117,7 @@
                     android:id="@+id/up_button"
                     android:src="@drawable/arrow_up"
                     android:contentDescription="@string/sharing_long_screenshot_move_up_button_description"
-                    android:elevation="@dimen/default_elevation_3"
+                    android:elevation="@dimen/long_screenshots_button_elev"
                     android:layout_width="@dimen/long_screenshots_button_size"
                     android:translationY="30dp"
                     style="@style/ToolbarButton" />
@@ -146,7 +148,7 @@
                     android:id="@+id/down_button"
                     android:src="@drawable/arrow_down"
                     android:contentDescription="@string/sharing_long_screenshot_move_down_button_description"
-                    android:elevation="@dimen/default_elevation_3"
+                    android:elevation="@dimen/long_screenshots_button_elev"
                     android:layout_width="@dimen/long_screenshots_button_size"
                     android:translationY="-30dp"
                     style="@style/ToolbarButton" />

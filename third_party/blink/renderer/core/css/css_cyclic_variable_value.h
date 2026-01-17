@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,7 @@ class CORE_EXPORT CSSCyclicVariableValue : public CSSInvalidVariableValue {
   explicit CSSCyclicVariableValue(base::PassKey<CSSValuePool>)
       : CSSInvalidVariableValue(kCyclicVariableValueClass) {}
 
-  String CustomCSSText() const;
+  WTF::String CustomCSSText() const;
 
   bool Equals(const CSSCyclicVariableValue&) const { return true; }
 

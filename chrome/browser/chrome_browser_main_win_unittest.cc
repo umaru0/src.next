@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,12 +8,12 @@
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/about_flags.h"
-#include "components/flags_ui/feature_entry_macros.h"
-#include "components/flags_ui/flags_ui_pref_names.h"
-#include "components/flags_ui/flags_ui_switches.h"
-#include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/webui/flags/feature_entry_macros.h"
+#include "components/webui/flags/flags_ui_pref_names.h"
+#include "components/webui/flags/flags_ui_switches.h"
+#include "components/webui/flags/pref_service_flags_storage.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 // Test GetRestartCommandLine function behavior. It should remove the program at
@@ -27,7 +27,7 @@ TEST(ChromeBrowserMainWinTest, GetRestartCommand) {
 
   // Simple command line with just the program.
   const base::CommandLine::StringType kNoArgsResult =
-      L" --restore-last-session";
+      L" --restore-last-session --restart";
   base::CommandLine restart_command_line =
       ChromeBrowserMainPartsWin::GetRestartCommandLine(simple_command_line);
   EXPECT_EQ(restart_command_line.GetCommandLineString(), kNoArgsResult);
@@ -42,7 +42,7 @@ TEST(ChromeBrowserMainWinTest, GetRestartCommand) {
   // Command line with a retained switch.
   const std::string kRetainedSwitch = "--enable-sandbox-audio";
   const base::CommandLine::StringType kRetainedSwitchResult =
-      L" --enable-sandbox-audio --restore-last-session";
+      L" --enable-sandbox-audio --restore-last-session --restart";
   base::CommandLine retained_switch_command_line(chrome_path);
   retained_switch_command_line.AppendSwitch(kRetainedSwitch);
   restart_command_line = ChromeBrowserMainPartsWin::GetRestartCommandLine(
@@ -85,7 +85,7 @@ TEST(ChromeBrowserMainWinTest, GetRestartCommand) {
   EXPECT_EQ(restart_command_line.GetCommandLineString(),
             L" --enable-features=Exp2 --enable-foo"
             L" --enable-sandbox-audio"
-            L" --restore-last-session");
+            L" --restore-last-session --restart");
 }
 
 // Test RegisterApplicationRestart to make sure there are no crashes.

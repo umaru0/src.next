@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,18 +9,19 @@
 #include <utility>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notimplemented.h"
 #include "base/one_shot_event.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
+#include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_management.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_signer.h"
 #include "chrome/browser/extensions/install_verifier_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -29,6 +30,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -40,6 +42,10 @@
 #include "extensions/common/manifest_url_handlers.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/extensions/extension_service.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace extensions {
 
@@ -115,7 +121,7 @@ InstallVerifier::InstallVerifier(ExtensionPrefs* prefs,
                                  content::BrowserContext* context)
     : prefs_(prefs), context_(context), bootstrap_check_complete_(false) {}
 
-InstallVerifier::~InstallVerifier() {}
+InstallVerifier::~InstallVerifier() = default;
 
 // static
 InstallVerifier* InstallVerifier::Get(
@@ -145,17 +151,14 @@ bool InstallVerifier::IsFromStore(const Extension& extension,
 void InstallVerifier::Init() {
   TRACE_EVENT0("browser,startup", "extensions::InstallVerifier::Init");
 
-  const base::DictionaryValue* pref = prefs_->GetInstallSignature();
-  if (pref) {
-    std::unique_ptr<InstallSignature> signature_from_prefs =
-        InstallSignature::FromValue(*pref);
-    if (signature_from_prefs.get()) {
-      if (!InstallSigner::VerifySignature(*signature_from_prefs)) {
-        DVLOG(1) << "Init - ignoring invalid signature";
-      } else {
-        signature_ = std::move(signature_from_prefs);
-        GarbageCollect();
-      }
+  std::unique_ptr<InstallSignature> signature_from_prefs =
+      InstallSignature::FromDict(prefs_->GetInstallSignature());
+  if (signature_from_prefs.get()) {
+    if (!InstallSigner::VerifySignature(*signature_from_prefs)) {
+      DVLOG(1) << "Init - ignoring invalid signature";
+    } else {
+      signature_ = std::move(signature_from_prefs);
+      GarbageCollect();
     }
   }
 
@@ -231,16 +234,12 @@ void InstallVerifier::RemoveMany(const ExtensionIdSet& ids) {
   if (!signature_.get() || !ShouldFetchSignature())
     return;
 
-  bool found_any = false;
-  for (auto i = ids.begin(); i != ids.end(); ++i) {
-    if (base::Contains(signature_->ids, *i) ||
-        base::Contains(signature_->invalid_ids, *i)) {
-      found_any = true;
-      break;
-    }
-  }
-  if (!found_any)
+  if (std::ranges::any_of(ids, [this](const std::string& id) {
+        return base::Contains(signature_->ids, id) ||
+               base::Contains(signature_->invalid_ids, id);
+      })) {
     return;
+  }
 
   std::unique_ptr<InstallVerifier::PendingOperation> operation(
       new InstallVerifier::PendingOperation(InstallVerifier::REMOVE));
@@ -260,9 +259,9 @@ std::string InstallVerifier::GetDebugPolicyProviderName() const {
   return std::string("InstallVerifier");
 }
 
-bool InstallVerifier::MustRemainDisabled(const Extension* extension,
-                                         disable_reason::DisableReason* reason,
-                                         std::u16string* error) const {
+bool InstallVerifier::MustRemainDisabled(
+    const Extension* extension,
+    disable_reason::DisableReason* reason) const {
   CHECK(extension);
   if (!CanUseExtensionApis(*extension))
     return false;
@@ -270,8 +269,11 @@ bool InstallVerifier::MustRemainDisabled(const Extension* extension,
     return false;
   if (extension->location() == mojom::ManifestLocation::kComponent)
     return false;
-  if (AllowedByEnterprisePolicy(extension->id()))
+  if (AllowedByEnterprisePolicy(extension->id()) &&
+      !ExtensionManagementFactory::GetForBrowserContext(context_)
+           ->IsForceInstalledInLowTrustEnvironment(*extension)) {
     return false;
+  }
 
   bool verified = true;
   if (base::Contains(InstallSigner::GetForcedNotFromWebstore(),
@@ -308,12 +310,9 @@ bool InstallVerifier::MustRemainDisabled(const Extension* extension,
                   << "might want to use a ScopedInstallVerifierBypassForTest "
                   << "instance to prevent this.";
 
-    if (reason)
+    if (reason) {
       *reason = disable_reason::DISABLE_NOT_VERIFIED;
-    if (error)
-      *error = l10n_util::GetStringFUTF16(
-          IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE,
-          l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE));
+    }
   }
   return !verified;
 }
@@ -321,42 +320,30 @@ bool InstallVerifier::MustRemainDisabled(const Extension* extension,
 InstallVerifier::PendingOperation::PendingOperation(OperationType type)
     : type(type) {}
 
-InstallVerifier::PendingOperation::~PendingOperation() {
-}
+InstallVerifier::PendingOperation::~PendingOperation() = default;
 
 ExtensionIdSet InstallVerifier::GetExtensionsToVerify() const {
   ExtensionIdSet result;
-  std::unique_ptr<ExtensionSet> extensions =
+  const ExtensionSet extensions =
       ExtensionRegistry::Get(context_)->GenerateInstalledExtensionsSet();
-  for (ExtensionSet::const_iterator iter = extensions->begin();
-       iter != extensions->end();
-       ++iter) {
-    if (NeedsVerification(**iter, context_))
-      result.insert((*iter)->id());
+  for (const auto& extension : extensions) {
+    if (NeedsVerification(*extension, context_)) {
+      result.insert(extension->id());
+    }
   }
   return result;
 }
 
 void InstallVerifier::MaybeBootstrapSelf() {
-  bool needs_bootstrap = false;
-
   ExtensionIdSet extension_ids = GetExtensionsToVerify();
-  if (signature_.get() == NULL && ShouldFetchSignature()) {
-    needs_bootstrap = true;
-  } else {
-    for (auto iter = extension_ids.begin(); iter != extension_ids.end();
-         ++iter) {
-      if (!IsKnownId(*iter)) {
-        needs_bootstrap = true;
-        break;
-      }
-    }
-  }
-
-  if (needs_bootstrap)
+  if ((signature_.get() == nullptr && ShouldFetchSignature()) ||
+      std::ranges::any_of(extension_ids, [this](const std::string& id) {
+        return !IsKnownId(id);
+      })) {
     AddMany(extension_ids, ADD_ALL_BOOTSTRAP);
-  else
+  } else {
     bootstrap_check_complete_ = true;
+  }
 }
 
 void InstallVerifier::OnVerificationComplete(bool success, OperationType type) {
@@ -370,20 +357,27 @@ void InstallVerifier::OnVerificationComplete(bool success, OperationType type) {
         const ExtensionSet& disabled_extensions =
             ExtensionRegistry::Get(context_)->disabled_extensions();
         for (ExtensionSet::const_iterator iter = disabled_extensions.begin();
-             iter != disabled_extensions.end();
-             ++iter) {
-          int disable_reasons = prefs_->GetDisableReasons((*iter)->id());
-          if (disable_reasons & disable_reason::DISABLE_NOT_VERIFIED &&
-              !MustRemainDisabled(iter->get(), NULL, NULL)) {
+             iter != disabled_extensions.end(); ++iter) {
+          if (prefs_->HasDisableReason((*iter)->id(),
+                                       disable_reason::DISABLE_NOT_VERIFIED) &&
+              !MustRemainDisabled(iter->get(), nullptr)) {
             prefs_->RemoveDisableReason((*iter)->id(),
                                         disable_reason::DISABLE_NOT_VERIFIED);
           }
         }
       }
       if (success || GetStatus() == VerifyStatus::ENFORCE_STRICT) {
+#if BUILDFLAG(IS_ANDROID)
+        NOTIMPLEMENTED() << "CheckManagementPolicy";
+#else
+        // TODO(crbug.com/409824638): Enable the following code for desktop
+        // android when ExtensionManagement is ported on desktop android and
+        // ExtensionService::CheckManagementPolicy() is refactored out of
+        // ExtensionService.
         ExtensionSystem::Get(context_)
             ->extension_service()
             ->CheckManagementPolicy();
+#endif  // !BUILDFLAG(IS_ANDROID)
       }
       break;
     // We don't need to check disable reasons for provisional adds or removals.
@@ -402,13 +396,8 @@ void InstallVerifier::GarbageCollect() {
   ExtensionIdSet leftovers = signature_->ids;
   leftovers.insert(signature_->invalid_ids.begin(),
                    signature_->invalid_ids.end());
-  ExtensionIdList all_ids;
-  prefs_->GetExtensions(&all_ids);
-  for (ExtensionIdList::const_iterator i = all_ids.begin();
-       i != all_ids.end(); ++i) {
-    auto found = leftovers.find(*i);
-    if (found != leftovers.end())
-      leftovers.erase(found);
+  for (const auto& extension_id : prefs_->GetExtensions()) {
+    leftovers.erase(extension_id);
   }
   if (!leftovers.empty()) {
     RemoveMany(leftovers);
@@ -434,9 +423,9 @@ void InstallVerifier::BeginFetch() {
     ids_to_sign.insert(signature_->ids.begin(), signature_->ids.end());
   }
   if (operation.type == InstallVerifier::REMOVE) {
-    for (auto i = operation.ids.begin(); i != operation.ids.end(); ++i) {
-      if (base::Contains(ids_to_sign, *i))
-        ids_to_sign.erase(*i);
+    for (const std::string& id : operation.ids) {
+      if (base::Contains(ids_to_sign, id))
+        ids_to_sign.erase(id);
     }
   } else {  // All other operation types are some form of "ADD".
     ids_to_sign.insert(operation.ids.begin(), operation.ids.end());
@@ -455,16 +444,15 @@ void InstallVerifier::SaveToPrefs() {
 
   if (!signature_.get() || signature_->ids.empty()) {
     DVLOG(1) << "SaveToPrefs - saving NULL";
-    prefs_->SetInstallSignature(NULL);
+    prefs_->SetInstallSignature(nullptr);
   } else {
-    base::DictionaryValue pref;
-    signature_->ToValue(&pref);
+    base::Value::Dict pref = signature_->ToDict();
     if (VLOG_IS_ON(1)) {
       DVLOG(1) << "SaveToPrefs - saving";
 
       DCHECK(InstallSigner::VerifySignature(*signature_));
       std::unique_ptr<InstallSignature> rehydrated =
-          InstallSignature::FromValue(pref);
+          InstallSignature::FromDict(pref);
       DCHECK(InstallSigner::VerifySignature(*rehydrated));
     }
     prefs_->SetInstallSignature(&pref);
@@ -484,8 +472,8 @@ void InstallVerifier::SignatureCallback(
 
     if (!provisional_.empty()) {
       // Update |provisional_| to remove ids that were successfully signed.
-      provisional_ = base::STLSetDifference<ExtensionIdSet>(
-          provisional_, signature_->ids);
+      provisional_ =
+          base::STLSetDifference<ExtensionIdSet>(provisional_, signature_->ids);
     }
   }
 

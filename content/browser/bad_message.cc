@@ -1,16 +1,16 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/bad_message.h"
 
-#include "base/bind.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
-#include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -32,7 +32,7 @@ void LogBadMessage(BadMessageReason reason) {
                                  base::NumberToString(reason));
 }
 
-void ReceivedBadMessageOnUIThread(int render_process_id,
+void ReceivedBadMessageOnUIThread(ChildProcessId render_process_id,
                                   BadMessageReason reason) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   RenderProcessHost* host = RenderProcessHost::FromID(render_process_id);
@@ -53,6 +53,11 @@ void ReceivedBadMessage(RenderProcessHost* host, BadMessageReason reason) {
 }
 
 void ReceivedBadMessage(int render_process_id, BadMessageReason reason) {
+  ReceivedBadMessage(ChildProcessId(render_process_id), reason);
+}
+
+void ReceivedBadMessage(ChildProcessId render_process_id,
+                        BadMessageReason reason) {
   // We generate a crash dump here since generating one after posting to the UI
   // thread is less useful.
   LogBadMessage(reason);
@@ -65,11 +70,6 @@ void ReceivedBadMessage(int render_process_id, BadMessageReason reason) {
     return;
   }
   ReceivedBadMessageOnUIThread(render_process_id, reason);
-}
-
-void ReceivedBadMessage(BrowserMessageFilter* filter, BadMessageReason reason) {
-  LogBadMessage(reason);
-  filter->ShutdownForBadMessage();
 }
 
 base::debug::CrashKeyString* GetRequestedSiteInfoKey() {

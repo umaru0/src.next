@@ -1,13 +1,13 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/chrome_extension_cookies_factory.h"
 
+#include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/chrome_extension_cookies.h"
-#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 using content::BrowserContext;
 
@@ -22,25 +22,32 @@ ChromeExtensionCookies* ChromeExtensionCookiesFactory::GetForBrowserContext(
 
 // static
 ChromeExtensionCookiesFactory* ChromeExtensionCookiesFactory::GetInstance() {
-  return base::Singleton<ChromeExtensionCookiesFactory>::get();
+  static base::NoDestructor<ChromeExtensionCookiesFactory> instance;
+  return instance.get();
 }
 
 ChromeExtensionCookiesFactory::ChromeExtensionCookiesFactory()
-    : BrowserContextKeyedServiceFactory(
+    : ProfileKeyedServiceFactory(
           "ChromeExtensionCookies",
-          BrowserContextDependencyManager::GetInstance()) {}
-
-ChromeExtensionCookiesFactory::~ChromeExtensionCookiesFactory() {}
-
-KeyedService* ChromeExtensionCookiesFactory::BuildServiceInstanceFor(
-    BrowserContext* context) const {
-  return new ChromeExtensionCookies(static_cast<Profile*>(context));
+          // Incognito gets separate extension cookies, too.
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              .WithGuest(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOwnInstance)
+              .Build()) {
+  DependsOn(CookieSettingsFactory::GetInstance());
+  DependsOn(HostContentSettingsMapFactory::GetInstance());
 }
 
-BrowserContext* ChromeExtensionCookiesFactory::GetBrowserContextToUse(
+ChromeExtensionCookiesFactory::~ChromeExtensionCookiesFactory() = default;
+
+std::unique_ptr<KeyedService>
+ChromeExtensionCookiesFactory::BuildServiceInstanceForBrowserContext(
     BrowserContext* context) const {
-  // Incognito gets separate extension cookies, too.
-  return chrome::GetBrowserContextOwnInstanceInIncognito(context);
+  return std::make_unique<ChromeExtensionCookies>(
+      static_cast<Profile*>(context));
 }
 
 }  // namespace extensions

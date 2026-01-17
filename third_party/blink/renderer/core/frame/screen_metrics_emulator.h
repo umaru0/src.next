@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_SCREEN_METRICS_EMULATOR_H_
 
 #include <memory>
+#include <vector>
 
 #include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/mojom/widget/device_emulation_params.mojom-blink.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
@@ -30,7 +32,7 @@ class ScreenMetricsEmulator : public GarbageCollected<ScreenMetricsEmulator> {
  public:
   ScreenMetricsEmulator(WebFrameWidgetImpl* frame_widget,
                         const display::ScreenInfos& screen_infos,
-                        const gfx::Size& widget_size,
+                        const gfx::Size& widget_size_dips,
                         const gfx::Size& visible_viewport_size,
                         const gfx::Rect& view_screen_rect,
                         const gfx::Rect& window_screen_rect);
@@ -91,11 +93,13 @@ class ScreenMetricsEmulator : public GarbageCollected<ScreenMetricsEmulator> {
 
   // Original values to restore back after emulation ends.
   display::ScreenInfos original_screen_infos_;
-  gfx::Size original_widget_size_;
+  gfx::Size original_widget_size_dips_;
   gfx::Size original_visible_viewport_size_;
   gfx::Rect original_view_screen_rect_;
   gfx::Rect original_window_screen_rect_;
-  std::vector<gfx::Rect> original_root_window_segments_;
+  std::vector<gfx::Rect> original_root_viewport_segments_
+      ALLOW_DISCOURAGED_TYPE(
+          "WebFrameWidgetImpl::SetViewportSegments() uses STL");
 };
 
 }  // namespace blink

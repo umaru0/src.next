@@ -14,7 +14,7 @@ All code in `blink/renderer` is an implementation detail of Blink
 and should not be used outside of it. Use [Blink's public API](../public)
 in code outside of Blink.
 
-### `core/`
+### [`core/`](core/README.md)
 
 The `core/` directory implements the essence of the Web Platform defined by specs
 and IDL interfaces. Due to historical reasons, `core/` contains a lot of features with
@@ -35,7 +35,7 @@ that satisfy requirements above are added.
 
 For example, `modules/crypto` implements WebCrypto API.
 
-### `platform/`
+### [`platform/`](platform/README.md)
 
 The `platform/` directory is a collection of lower level features of Blink that are factored
 out of a monolithic `core/`. These features follow the same principles as `modules/`,
@@ -51,7 +51,7 @@ that satisfy requirements above are added.
 
 For example, `platform/scheduler` implements a task scheduler for all tasks
 posted by Blink, while `platform/wtf` implements Blink-specific containers
-(e.g., `WTF::Vector`, `WTF::HashTable`, `WTF::String`).
+(e.g., `blink::Vector`, `blink::HashMap`, `blink::String`).
 
 ### `core` vs `modules` vs `platform` split
 
@@ -135,7 +135,7 @@ See [this diagram](https://docs.google.com/document/d/1yYei-V76q3Mb-5LeJfNUMitmj
 ### Type dependencies
 
 Member variables of the following types are strongly discouraged in Blink:
-  - STL strings and containers. Use `WTF::String` and WTF containers instead.
+  - STL strings and containers. Use `blink::String` and WTF containers instead.
   - `GURL` and `url::Origin`. Use `KURL` and `SecurityOrigin` respectively.
   - Any `//base` type which has a matching type in `platform/wtf`. The number of
   duplicated types between WTF and base is continuously shrinking,
@@ -145,9 +145,9 @@ The types above could only be used at the boundary to interoperate
 with `//base`, `//services`, `//third_party/blink/common` and other
 Chromium-side or third-party code. It is also allowed to use local variables
 of these types when convenient, as long as the result is not stored
-in a member variable.
+in a member variable (with exceptions described below).
 For example, calling an utility function on an `std::string` which came
-from `//net` and then converting to `WTF::String` to store in a field
+from `//net` and then converting to `blink::String` to store in a field
 is allowed.
 
 We try to share as much code between Chromium and Blink as possible,
@@ -160,19 +160,58 @@ Exceptions to this rule:
   also runs in the browser process, and should use STL and base instead of WTF.
   - Selected types in `public/platform` and `public/web`,
   whole purpose of which is conversion between WTF and STL,
-  for example `WebString` or `WebVector`.
+  for example `WebString`.
+  - A member variable that only interacts with the data outside of the blink
+  boundary.
 
 To prevent use of random types, we control allowed types by allow listing them
 in DEPS and a [presubmit
 script](../tools/blinkpy/presubmit/audit_non_blink_usage.py).
+
+We also have a
+[clang plugin](../../../tools/clang/plugins/BlinkDataMemberTypeChecker.h) to
+check for discouraged types used for blink member variables. We can use the
+following code to allow the third exception above:
+```
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
+
+class Cls {
+  ...
+  std::vector<int> foo_ ALLOW_DISCOURAGED_TYPE("Matches WebBar API");
+};
+```
 
 ### Mojo
 
 Blink can use Mojo and directly talk to the browser process. This allows removal of unnecessary
 public APIs and abstraction layers and it is highly recommended.
 
+### Threading model
+
+When you need to use threads in Blink, cross-thread communication should be
+done with a message passing model (i.e.,
+call cross_thread_task_runner->PostTask() with cloned POD input parameters).
+
+A shared memory model (e.g., using mutex locks or atomics) is strongly
+discouraged. The rationale is that mutex locks and atomics are really
+hard to use correctly, and even if it appears to be manageable initially, it
+gets out of control easily. Historically, shared memory programming patterns
+in Blink have been one of the major sources of use-after-free security bugs and
+stability issues (e.g., WebAudio, memory access via CrossThreadPersistent).
+Remember that, unlike V8, Blink does not have a strict API boundary and is
+touched by many developers, and thus it's more important to adopt a less
+error-prone programming pattern. There are existing instances of shared and
+concurrent memory access in blink, but they should not be extended or
+cargo-culted. Just because you see a shared memory pattern in the code does
+not mean it's okay to use the pattern elsewhere.
+
+Introducing a few mutex locks or atomics in simple classes (e.g., shared
+counters) is fine. However, when you need to introduce a non-trivial number
+of mutex locks and atomics, the architecture needs to be designed and
+reviewed carefully. In that case, please get approval from
+platform-architecture-dev@chromium.org.
+
 ## Contact
 
 If you have any questions about the directory architecture and dependencies,
 reach out to platform-architecture-dev@chromium.org!
-

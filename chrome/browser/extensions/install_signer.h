@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,13 +10,13 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
+#include "base/values.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
 
-namespace base {
-class DictionaryValue;
-}
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace network {
 class SimpleURLLoader;
@@ -50,11 +50,11 @@ struct InstallSignature {
   InstallSignature(const InstallSignature& other);
   ~InstallSignature();
 
-  // Helper methods for serialization to/from a base::DictionaryValue.
-  void ToValue(base::DictionaryValue* value) const;
+  // Helper methods for serialization to/from a base::Value::Dict.
+  [[nodiscard]] base::Value::Dict ToDict() const;
 
-  static std::unique_ptr<InstallSignature> FromValue(
-      const base::DictionaryValue& value);
+  static std::unique_ptr<InstallSignature> FromDict(
+      const base::Value::Dict& dict);
 };
 
 // Objects of this class encapsulate an operation to get a signature proving
@@ -65,7 +65,7 @@ class InstallSigner {
       base::OnceCallback<void(std::unique_ptr<InstallSignature>)>;
 
   // IMPORTANT NOTE: It is possible that only some, but not all, of the entries
-  // in |ids| will be successfully signed by the backend. Callers should always
+  // in `ids` will be successfully signed by the backend. Callers should always
   // check the set of ids in the InstallSignature passed to their callback, as
   // it may contain only a subset of the ids they passed in.
   InstallSigner(
@@ -91,12 +91,11 @@ class InstallSigner {
   static bool VerifySignature(const InstallSignature& signature);
 
  private:
-
-  // A helper function that calls |callback_| with an indication that an error
+  // A helper function that calls `callback_` with an indication that an error
   // happened (currently done by passing an empty pointer).
   void ReportErrorViaCallback();
 
-  // Called when |simple_loader_| has returned a result to parse the response,
+  // Called when `simple_loader_` has returned a result to parse the response,
   // and then call HandleSignatureResult with structured data.
   void ParseFetchResponse(std::unique_ptr<std::string> response_body);
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,10 +25,10 @@ struct InstallWarning {
   ~InstallWarning();
 
   bool operator==(const InstallWarning& other) const {
-    // We don't have to look at |key| or |specific| here, because they are each
+    // We don't have to look at `key` or `specific` here, because they are each
     // used in the the message itself.
     // For example, a full message would be "Permission 'foo' is unknown or URL
-    // pattern is malformed." |key| here is "permissions", and |specific| is
+    // pattern is malformed." `key` here is "permissions", and `specific` is
     // "foo", but these are redundant with the message.
     return message == other.message;
   }

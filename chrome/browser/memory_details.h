@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@
 #include "base/process/process_handle.h"
 #include "base/process/process_metrics.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "content/public/common/process_type.h"
 
 namespace memory_instrumentation {
@@ -142,7 +141,7 @@ class MemoryDetails : public base::RefCountedThreadSafe<MemoryDetails> {
   // Returns a pointer to the ProcessData structure for Chrome.
   ProcessData* ChromeBrowser();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const base::SwapInfo& swap_info() const { return swap_info_; }
 #endif
 
@@ -166,7 +165,7 @@ class MemoryDetails : public base::RefCountedThreadSafe<MemoryDetails> {
 
   std::vector<ProcessData> process_data_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   base::SwapInfo swap_info_;
 #endif
 };

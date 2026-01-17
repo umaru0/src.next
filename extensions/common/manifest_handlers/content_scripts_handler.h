@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ struct ContentScriptsInfo : public Extension::ManifestData {
   // Returns the list of hosts that this extension can run content scripts on.
   static URLPatternSet GetScriptableHosts(const Extension* extension);
 
-  // Returns true if the extension has a content script declared at |url|.
+  // Returns true if the extension has a content script declared at `url`.
   static bool ExtensionHasScriptAtURL(const Extension* extension,
                                       const GURL& url);
 };
@@ -45,7 +45,7 @@ class ContentScriptsHandler : public ManifestHandler {
   ~ContentScriptsHandler() override;
 
   bool Parse(Extension* extension, std::u16string* error) override;
-  bool Validate(const Extension* extension,
+  bool Validate(const Extension& extension,
                 std::string* error,
                 std::vector<InstallWarning>* warnings) const override;
 

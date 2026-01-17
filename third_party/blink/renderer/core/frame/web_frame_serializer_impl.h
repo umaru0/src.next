@@ -35,21 +35,19 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_frame_serializer.h"
 #include "third_party/blink/public/web/web_frame_serializer_client.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/platform/text/web_entities.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
-namespace WTF {
-class TextEncoding;
-}
-
 namespace blink {
 
 class Document;
 class Element;
 class Node;
+class TextEncoding;
 class WebLocalFrame;
 class WebLocalFrameImpl;
 
@@ -98,10 +96,10 @@ class WebFrameSerializerImpl {
     STACK_ALLOCATED();
 
    public:
-    SerializeDomParam(const KURL&, const WTF::TextEncoding&, Document*);
+    SerializeDomParam(const KURL&, const TextEncoding&, Document*);
 
     const KURL& url;
-    const WTF::TextEncoding& text_encoding;
+    const TextEncoding& text_encoding;
     Document* document;
     bool is_html_document;  // document.isHTMLDocument()
     bool have_seen_doc_type;
@@ -153,6 +151,9 @@ class WebFrameSerializerImpl {
   void EncodeAndFlushBuffer(WebFrameSerializerClient::FrameSerializationStatus,
                             SerializeDomParam*,
                             FlushOption);
+
+  // Serialize the open tag of a ShadowRoot as a <template>
+  void ShadowRootTagToString(ShadowRoot*, SerializeDomParam*);
 
   // Serialize open tag of an specified element.
   void OpenTagToString(Element*, SerializeDomParam*);

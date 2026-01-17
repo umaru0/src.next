@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,6 +19,7 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/fake_autocomplete_provider_client.h"
 #include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/shortcuts_provider_test_util.h"
@@ -41,7 +42,7 @@ struct TestShortcutData shortcut_test_db[] = {
     {"BD85DBA2-8C29-49F9-84AE-48E1E90880F1", "echo echo", "echo echo",
      "chrome-extension://cedabbhfglmiikkmdgcpjdkocfcmbkee/?q=echo",
      AutocompleteMatch::DocumentType::NONE, "Run Echo command: echo", "0,0",
-     "Echo", "0,4", ui::PAGE_TRANSITION_TYPED,
+     "Echo echo", "0,4", ui::PAGE_TRANSITION_TYPED,
      AutocompleteMatchType::EXTENSION_APP_DEPRECATED, "", 1, 1},
 };
 
@@ -59,7 +60,7 @@ class ShortcutsProviderExtensionTest : public testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  std::unique_ptr<ChromeAutocompleteProviderClient> client_;
+  std::unique_ptr<FakeAutocompleteProviderClient> client_;
   scoped_refptr<ShortcutsBackend> backend_;
   scoped_refptr<ShortcutsProvider> provider_;
 };
@@ -75,13 +76,14 @@ void ShortcutsProviderExtensionTest::SetUp() {
       base::BindRepeating(
           &ShortcutsBackendFactory::BuildProfileNoDatabaseForTesting));
 
-  client_ = std::make_unique<ChromeAutocompleteProviderClient>(profile_.get());
+  client_ = std::make_unique<FakeAutocompleteProviderClient>();
   backend_ = ShortcutsBackendFactory::GetForProfile(profile_.get());
   ASSERT_TRUE(backend_.get());
+  client_->set_shortcuts_backend(backend_);
+  ASSERT_TRUE(client_->GetShortcutsBackend());
   provider_ = new ShortcutsProvider(client_.get());
   PopulateShortcutsBackendWithTestData(client_->GetShortcutsBackend(),
-                                       shortcut_test_db,
-                                       std::size(shortcut_test_db));
+                                       shortcut_test_db);
 }
 
 void ShortcutsProviderExtensionTest::TearDown() {

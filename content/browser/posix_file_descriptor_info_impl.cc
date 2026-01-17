@@ -1,9 +1,10 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/posix_file_descriptor_info_impl.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -66,16 +67,15 @@ bool PosixFileDescriptorInfoImpl::HasID(int id) const {
 }
 
 bool PosixFileDescriptorInfoImpl::OwnsFD(base::PlatformFile file) {
-  return base::Contains(owned_descriptors_, file);
+  return base::Contains(owned_descriptors_, file, &base::ScopedFD::get);
 }
 
 base::ScopedFD PosixFileDescriptorInfoImpl::ReleaseFD(base::PlatformFile file) {
-  DCHECK(OwnsFD(file));
+  auto found =
+      std::ranges::find(owned_descriptors_, file, &base::ScopedFD::get);
+  CHECK(found != owned_descriptors_.end());
 
   base::ScopedFD fd;
-  auto found =
-      std::find(owned_descriptors_.begin(), owned_descriptors_.end(), file);
-
   std::swap(*found, fd);
   owned_descriptors_.erase(found);
 

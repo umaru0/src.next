@@ -1,46 +1,21 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/kiwibrowser/src.next/kiwi/kiwi_logo_circle.svg" alt="KiwiBrowser"
-	title="KiwiBrowser" width="200" height="200"/>
- </p>
-<p align="center">
-  <a href="https://github.com/kiwibrowser/src.next/releases">
-  <img src="https://img.shields.io/github/v/release/kiwibrowser/src.next?include_prereleases&label=latest%20release"/>
-</a>
-  <a href="https://github.com/kiwibrowser/src.next/release">
-<img src="https://img.shields.io/github/downloads/kiwibrowser/src.next/total?label=GitHub%20Downloads&color=%6BDDD5"></a>
-<a href="https://github.com/kiwibrowser/src.next/blob/kiwi/LICENSE">
-  <img src="https://img.shields.io/github/license/kiwibrowser/src.next?color=%236BDDD5"/></a>
+# ![Logo](chrome/app/theme/chromium/product_logo_64.png) Chromium
 
-  </p>
+Chromium is an open-source browser project that aims to build a safer, faster,
+and more stable way for all users to experience the web.
 
-# Kiwi Browser
+The project's web site is https://www.chromium.org.
 
-Important note: Kiwi Browser is now archived. It will no longer be maintained after January 2025.
+To check out the source code locally, don't use `git clone`! Instead,
+follow [the instructions on how to get the code](docs/get_the_code.md).
 
-<img src="https://edgemobilegrowth.microsoft.com/extension/kiwi_to_edge.jpeg" height="100" />
+Documentation in the source is rooted in [docs/README.md](docs/README.md).
 
-To support users who rely on extensions, we've partnered with the Microsoft Edge team to offer a smooth migration path.
+Learn how to [Get Around the Chromium Source Code Directory
+Structure](https://www.chromium.org/developers/how-tos/getting-around-the-chrome-source-code).
 
-Clicking <a href="https://edgemobileapp.microsoft.com/?adjustId=1mfkz3u3_1m6jnsdw">the link</a> will prompt you to install Microsoft Edge, reveal a hidden message in the Edge Extensions Hub, and uNBlock a powerful Manifest V2 extension there.
+For historical reasons, there are some small top level directories. Now the
+guidance is that new top level directories are for product (e.g. Chrome,
+Android WebView, Ash). Even if these products have multiple executables, the
+code should be in subdirectories of the product.
 
-The extensions code for Kiwi Browser also has been integrated into the development version of Microsoft Edge: [Microsoft Edge Canary](https://play.google.com/store/apps/details?id=com.microsoft.emmx.canary).
-
-To install extensions on Microsoft Edge Canary:
-
-1. Open **Microsoft Edge Canary** and go to **Settings > About Microsoft Edge**.  
-2. Tap the **Edge build number** (e.g., `xx.0.2487.0`) 5 times to enable **Developer Options**.  
-3. In Developer Options, select **Extension install by id**.  
-
-To find the extension ID:  
-- Open the [Microsoft Edge Web Store](https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home).  
-- Locate and select the desired extension.  
-- Copy the ID from the URL (e.g., for Bitwarden, the ID is `jbkfoedolllekgbhcbcoahefnbanhhlh` from the URL ending).  
-
-4. Paste the extension ID into the **Extension install by id** field.  
-5. The extension will install.  
-
-If you really need Kiwi Browser, you can download the [latest published version of Kiwi Browser here](https://github.com/kiwibrowser/src.next/releases/tag/14310011181). Do not download Kiwi Browser from any other sources.
-
-While your Kiwi Browser installation will still work for some time, it’s essential to explore alternatives like [Microsoft Edge Canary](https://play.google.com/store/apps/details?id=com.microsoft.emmx.canary), [Vivaldi Browser](https://play.google.com/store/apps/details?id=com.vivaldi.browser) or [Mozilla Firefox](https://play.google.com/store/apps/details?id=org.mozilla.firefox) to stay secure and up-to-date.
-
--- Arnaud.
+If you found a bug, please file it at https://crbug.com/new.

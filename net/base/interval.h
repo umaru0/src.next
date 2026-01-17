@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -174,10 +174,6 @@ class Interval {
     if (ae != be)
       return false;  // Empty cannot equal nonempty.
     return a.min() == b.min() && a.max() == b.max();
-  }
-
-  friend bool operator!=(const Interval& a, const Interval& b) {
-    return !(a == b);
   }
 
   // Defines a comparator which can be used to induce an order on Intervals, so

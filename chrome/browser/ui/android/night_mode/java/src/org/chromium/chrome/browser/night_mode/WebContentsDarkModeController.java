@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.night_mode;
 
 import android.content.Context;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics.AutoDarkSettingsChangeSource;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -17,22 +18,11 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-
-import android.content.SharedPreferences.Editor;
-
-import org.chromium.base.ContextUtils;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.base.Log;
-import org.chromium.base.SysUtils;
-import java.text.DecimalFormat;
-
 /**
  * A controller class could enable or disable web content dark mode feature based on the content
  * settings {@link ContentSettingsType.AUTO_DARK_WEB_CONTENT}.
  */
+@NullMarked
 public class WebContentsDarkModeController {
     /**
      * Return whether auto dark mode is enable for a given URL.
@@ -42,8 +32,9 @@ public class WebContentsDarkModeController {
      */
     public static boolean isEnabledForUrl(BrowserContextHandle browserContextHandle, GURL url) {
         @ContentSettingValues
-        int contentSetting = WebsitePreferenceBridge.getContentSetting(
-                browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT, url, url);
+        int contentSetting =
+                WebsitePreferenceBridge.getContentSetting(
+                        browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT, url, url);
         return contentSetting != ContentSettingValues.BLOCK;
     }
 
@@ -59,15 +50,19 @@ public class WebContentsDarkModeController {
         // menu. The app menu item should only be visible (and thus clickable) if Auto Dark is
         // enabled. If it is enabled, the default content setting should be ALLOW.
         assert WebsitePreferenceBridge.getDefaultContentSetting(
-                browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
+                        browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
                 == ContentSettingValues.ALLOW;
 
         @ContentSettingValues
         int contentSettingValue =
                 enabled ? ContentSettingValues.DEFAULT : ContentSettingValues.BLOCK;
 
-        WebsitePreferenceBridge.setContentSettingDefaultScope(browserContextHandle,
-                ContentSettingsType.AUTO_DARK_WEB_CONTENT, url, url, contentSettingValue);
+        WebsitePreferenceBridge.setContentSettingDefaultScope(
+                browserContextHandle,
+                ContentSettingsType.AUTO_DARK_WEB_CONTENT,
+                url,
+                url,
+                contentSettingValue);
         AutoDarkMetrics.recordAutoDarkSettingsChangeSource(
                 AutoDarkSettingsChangeSource.APP_MENU, enabled);
     }
@@ -91,19 +86,21 @@ public class WebContentsDarkModeController {
     /**
      * Return whether web content dark mode is enabled by settings, despite whether the current
      * activity is in night mode.
+     *
      * @param browserContextHandle Current browser context handle.
-     * */
+     */
     public static boolean isGlobalUserSettingsEnabled(BrowserContextHandle browserContextHandle) {
         return WebsitePreferenceBridge.isContentSettingEnabled(
                 browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT);
     }
 
     /**
-     * Whether web contents dark mode feature is enabled for the UI.
-     * Returns true when auto dark global setting is enabled, and context is in night mode.
+     * Whether web contents dark mode feature is enabled for the UI. Returns true when auto dark
+     * global setting is enabled, and context is in night mode.
+     *
      * @param context {@link Context} used to check whether UI is in night mode.
      * @param browserContextHandle Current browser context handle.
-     * */
+     */
     public static boolean isFeatureEnabled(
             Context context, BrowserContextHandle browserContextHandle) {
         return WebContentsDarkModeController.isGlobalUserSettingsEnabled(browserContextHandle)
@@ -112,18 +109,21 @@ public class WebContentsDarkModeController {
 
     /**
      * Records UKM when the user disables auto-dark theming for a site through the app menu.
+     *
      * @param webContents The web contents associated with the current tab.
      * @param enabled The new per-site setting state for the current site.
      */
     public static void recordAutoDarkUkm(WebContents webContents, boolean enabled) {
         if (enabled) return;
-        new UkmRecorder.Bridge().recordEventWithBooleanMetric(
-                webContents, "Android.DarkTheme.AutoDarkMode", "DisabledByUser");
+        new UkmRecorder(webContents, "Android.DarkTheme.AutoDarkMode")
+                .addBooleanMetric("DisabledByUser")
+                .record();
     }
 
     /**
      * Return the current enabled state for auto dark mode. If the input {@link GURL} is not null,
      * the enabled state will also check if auto dark is enabled for URL.
+     *
      * @param browserContextHandle Current browser context handle.
      * @param context {@link Context} used to check whether UI is in night mode.
      * @param url Queried URL whether auto dark is enabled.
@@ -141,41 +141,5 @@ public class WebContentsDarkModeController {
             return false;
         }
         return true;
-    }
-
-    // copy-paste of the setting in AccessibilityPreferences
-    private static float getUserNightModeFactor() {
-        float nightFactor = ContextUtils.getAppSharedPreferences().getFloat("user_night_mode_factor", 0.99f);
-        return nightFactor;
-    }
-
-
-    public static void updateDarkModeStringSettings() {
-        String nightModeSettings = "";
-
-        if (ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("default") || ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("amoled")) {
-          nightModeSettings = "ContrastPercent=0,"; // -1 to 1
-          nightModeSettings += "IsGrayScale=1,ImageGrayScalePercent=0.15,ImagePolicy=0,";
-        } else if (ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("amoled_grayscale")) {
-          nightModeSettings = "ContrastPercent=0,"; // -1 to 1
-          nightModeSettings += "IsGrayScale=1,ImageGrayScalePercent=1.0,ImagePolicy=0,";
-        } else if (ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("gray")) {
-          nightModeSettings = "ContrastPercent=0.15,"; // -1 to 1
-          nightModeSettings += "IsGrayScale=1,ImageGrayScalePercent=0.15,ImagePolicy=0,";
-        } else if (ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("gray_grayscale")) {
-          nightModeSettings = "ContrastPercent=0.15,"; // -1 to 1
-          nightModeSettings += "IsGrayScale=1,ImageGrayScalePercent=1.0,ImagePolicy=0,";
-        } else if (ContextUtils.getAppSharedPreferences().getString("active_nightmode", "default").equals("high_contrast")) {
-          nightModeSettings = "ContrastPercent=-0.15,"; // -1 to 1
-          nightModeSettings += "IsGrayScale=1,ImageGrayScalePercent=0.15,ImagePolicy=0,IncreaseTextContrast=1,";
-        }
-
-        if (ContextUtils.getAppSharedPreferences().getInt("ui_theme_setting", 0) == 2)
-          nightModeSettings += "isDarkUi=1";
-        else
-          nightModeSettings += "isDarkUi=0";
-
-        SharedPreferencesManager.getInstance().writeStringUnchecked("night_mode_settings", nightModeSettings);
-        Log.i("Kiwi", "SetContentCommandLineFlags - Setting new dark mode settings to [" + nightModeSettings + "]");
     }
 }

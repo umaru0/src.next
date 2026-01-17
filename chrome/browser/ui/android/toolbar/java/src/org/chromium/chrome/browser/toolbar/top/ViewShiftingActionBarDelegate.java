@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,9 +9,12 @@ import android.view.ViewGroup;
 
 import androidx.appcompat.app.ActionBar;
 
+import org.chromium.build.annotations.NullMarked;
+
 /**
  * An {@link ActionModeController.ActionBarDelegate} that shifts a view as the action bar appears.
  */
+@NullMarked
 public class ViewShiftingActionBarDelegate implements ActionModeController.ActionBarDelegate {
     /** The action bar which this delegate works for. */
     private final ActionBar mActionBar;

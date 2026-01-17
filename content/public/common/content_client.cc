@@ -1,29 +1,35 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/public/common/content_client.h"
 
-#include "base/files/file_path.h"
+#include <string_view>
+
 #include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
-#include "base/notreached.h"
-#include "base/strings/string_piece.h"
+#include "base/notimplemented.h"
+#include "base/strings/string_view_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/user_agent.h"
 #include "ui/gfx/image/image.h"
 
 namespace content {
 
 static ContentClient* g_client;
 
+static bool g_can_change_browser_client = true;
+
 class InternalTestInitializer {
  public:
   static ContentBrowserClient* SetBrowser(ContentBrowserClient* b) {
+    CHECK(g_can_change_browser_client)
+        << "The wrong ContentBrowserClient subclass is being used. In "
+           "content_browsertests, subclass "
+           "ContentBrowserTestContentBrowserClient.";
     ContentBrowserClient* rv = g_client->browser_;
     g_client->browser_ = b;
     return rv;
@@ -41,6 +47,20 @@ class InternalTestInitializer {
     return rv;
   }
 };
+
+// static
+void ContentClient::SetCanChangeContentBrowserClientForTesting(bool value) {
+  g_can_change_browser_client = value;
+}
+
+// static
+void ContentClient::SetBrowserClientAlwaysAllowForTesting(
+    ContentBrowserClient* b) {
+  bool old = g_can_change_browser_client;
+  g_can_change_browser_client = true;
+  SetBrowserClientForTesting(b);  // IN-TEST
+  g_can_change_browser_client = old;
+}
 
 void SetContentClient(ContentClient* client) {
   g_client = client;
@@ -85,10 +105,14 @@ std::u16string ContentClient::GetLocalizedString(
   return std::u16string();
 }
 
-base::StringPiece ContentClient::GetDataResource(
+bool ContentClient::HasDataResource(int resource_id) const {
+  return false;
+}
+
+std::string_view ContentClient::GetDataResource(
     int resource_id,
     ui::ResourceScaleFactor scale_factor) {
-  return base::StringPiece();
+  return std::string_view();
 }
 
 base::RefCountedMemory* ContentClient::GetDataResourceBytes(int resource_id) {
@@ -101,22 +125,13 @@ std::string ContentClient::GetDataResourceString(int resource_id) {
       GetDataResourceBytes(resource_id);
   if (!memory)
     return std::string();
-  return std::string(memory->front_as<char>(), memory->size());
+  return std::string(base::as_string_view(*memory));
 }
 
 gfx::Image& ContentClient::GetNativeImageNamed(int resource_id) {
   static base::NoDestructor<gfx::Image> kEmptyImage;
   return *kEmptyImage;
 }
-
-#if BUILDFLAG(IS_MAC)
-base::FilePath ContentClient::GetChildProcessPath(
-    int child_flags,
-    const base::FilePath& helpers_path) {
-  NOTIMPLEMENTED();
-  return base::FilePath();
-}
-#endif
 
 std::string ContentClient::GetProcessTypeNameInEnglish(int type) {
   NOTIMPLEMENTED();
@@ -140,5 +155,14 @@ media::MediaDrmBridgeClient* ContentClient::GetMediaDrmBridgeClient() {
 void ContentClient::ExposeInterfacesToBrowser(
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     mojo::BinderMap* binders) {}
+
+bool ContentClient::ShouldAllowDefaultSiteInstanceGroup() {
+  return true;
+}
+
+bool ContentClient::IsFilePickerAllowedForCrossOriginSubframe(
+    const url::Origin& origin) {
+  return false;
+}
 
 }  // namespace content

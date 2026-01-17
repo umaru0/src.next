@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ class MockCSSPaintImageGenerator : public CSSPaintImageGenerator {
   MOCK_METHOD3(Paint,
                scoped_refptr<Image>(const ImageResourceObserver&,
                                     const gfx::SizeF& container_size,
-                                    const CSSStyleValueVector*));
+                                    const GCedCSSStyleValueVector*));
   MOCK_CONST_METHOD0(NativeInvalidationProperties, Vector<CSSPropertyID>&());
   MOCK_CONST_METHOD0(CustomInvalidationProperties, Vector<AtomicString>&());
   MOCK_CONST_METHOD0(HasAlpha, bool());

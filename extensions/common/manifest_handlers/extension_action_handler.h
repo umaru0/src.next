@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,12 +22,13 @@ class ExtensionActionHandler : public ManifestHandler {
   ~ExtensionActionHandler() override;
 
   bool Parse(Extension* extension, std::u16string* error) override;
-  bool Validate(const Extension* extension,
+  bool Validate(const Extension& extension,
                 std::string* error,
                 std::vector<InstallWarning>* warnings) const override;
 
  private:
   bool AlwaysParseForType(Manifest::Type type) const override;
+  bool AlwaysValidateForType(Manifest::Type type) const override;
   base::span<const char* const> Keys() const override;
 };
 

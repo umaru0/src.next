@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,70 +11,80 @@ import android.content.res.Configuration;
 import androidx.collection.ArraySet;
 
 import org.chromium.base.Log;
-import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.process_launcher.ChildProcessConnection;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Manages oom bindings used to bound child services.
  * This object must only be accessed from the launcher thread.
  */
+@NullMarked
 class BindingManager implements ComponentCallbacks2 {
     private static final String TAG = "BindingManager";
 
-    // Low reduce ratio of moderate binding.
-    private static final float MODERATE_BINDING_LOW_REDUCE_RATIO = 0.25f;
-    // High reduce ratio of moderate binding.
-    private static final float MODERATE_BINDING_HIGH_REDUCE_RATIO = 0.5f;
+    public static final int NO_MAX_SIZE = -1;
+
+    // Low reduce ratio of bindings.
+    private static final float BINDING_LOW_REDUCE_RATIO = 0.25f;
+    // High reduce ratio of binding.
+    private static final float BINDING_HIGH_REDUCE_RATIO = 0.5f;
 
     // Delays used when clearing moderate binding pool when onSentToBackground happens.
-    private static final long MODERATE_BINDING_POOL_CLEARER_DELAY_MILLIS = 10 * 1000;
+    private static final long BINDING_POOL_CLEARER_DELAY_MILLIS = 10 * 1000;
 
     private final Set<ChildProcessConnection> mConnections = new ArraySet<ChildProcessConnection>();
     // Can be -1 to mean no max size.
     private final int mMaxSize;
     private final Iterable<ChildProcessConnection> mRanking;
     private final Runnable mDelayedClearer;
+    private final @Nullable Consumer<ChildProcessConnection> mOnChangedImplicitly;
 
-    // If not null, this is the connection in |mConnections| that does not have a moderate binding
-    // added by BindingManager.
-    private ChildProcessConnection mWaivedConnection;
+    // If not null, this is the connection in |mConnections| that does not have a binding added
+    // by BindingManager.
+    private @Nullable ChildProcessConnection mWaivedConnection;
+
+    private int mConnectionsDroppedDueToMaxSize;
 
     @Override
     public void onTrimMemory(final int level) {
-        LauncherThread.post(new Runnable() {
-            @Override
-            public void run() {
-                Log.i(TAG, "onTrimMemory: level=%d, size=%d", level, mConnections.size());
-                if (mConnections.isEmpty()) {
-                    return;
-                }
-                if (level <= TRIM_MEMORY_RUNNING_MODERATE) {
-                    reduce(MODERATE_BINDING_LOW_REDUCE_RATIO);
-                } else if (level <= TRIM_MEMORY_RUNNING_LOW) {
-                    reduce(MODERATE_BINDING_HIGH_REDUCE_RATIO);
-                } else if (level == TRIM_MEMORY_UI_HIDDEN) {
-                    // This will be handled by |mDelayedClearer|.
-                    return;
-                } else {
-                    removeAllConnections();
-                }
-            }
-        });
+        LauncherThread.post(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(TAG, "onTrimMemory: level=%d, size=%d", level, mConnections.size());
+                        if (mConnections.isEmpty()) {
+                            return;
+                        }
+                        if (level <= TRIM_MEMORY_RUNNING_MODERATE) {
+                            reduce(BINDING_LOW_REDUCE_RATIO);
+                        } else if (level <= TRIM_MEMORY_RUNNING_LOW) {
+                            reduce(BINDING_HIGH_REDUCE_RATIO);
+                        } else if (level == TRIM_MEMORY_UI_HIDDEN) {
+                            // This will be handled by |mDelayedClearer|.
+                            return;
+                        } else {
+                            removeAllConnections();
+                        }
+                    }
+                });
     }
 
     @Override
     public void onLowMemory() {
-        LauncherThread.post(new Runnable() {
-            @Override
-            public void run() {
-                Log.i(TAG, "onLowMemory: evict %d bindings", mConnections.size());
-                removeAllConnections();
-            }
-        });
+        LauncherThread.post(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(TAG, "onLowMemory: evict %d bindings", mConnections.size());
+                        removeAllConnections();
+                    }
+                });
     }
 
     @Override
@@ -95,22 +105,31 @@ class BindingManager implements ComponentCallbacks2 {
 
     private void removeOldConnections(int numberOfConnections) {
         assert numberOfConnections <= mConnections.size();
+        ChildProcessConnection firstRemovedConnection = null;
         int numRemoved = 0;
         for (ChildProcessConnection connection : mRanking) {
             if (mConnections.contains(connection)) {
-                removeModerateBindingIfNeeded(connection);
+                boolean bindingRemoved = removeBindingIfNeeded(connection);
                 mConnections.remove(connection);
+                if (bindingRemoved && firstRemovedConnection == null) {
+                    firstRemovedConnection = connection;
+                }
                 if (++numRemoved == numberOfConnections) break;
             }
         }
+        if (firstRemovedConnection != null && mOnChangedImplicitly != null) {
+            mOnChangedImplicitly.accept(firstRemovedConnection);
+        }
     }
 
-    private void removeModerateBindingIfNeeded(ChildProcessConnection connection) {
-        if (connection == mWaivedConnection) {
-            mWaivedConnection = null;
+    private boolean removeBindingIfNeeded(ChildProcessConnection connection) {
+        boolean removeBinding = connection != mWaivedConnection;
+        if (removeBinding) {
+            removeBinding(connection);
         } else {
-            removeModerateBinding(connection);
+            mWaivedConnection = null;
         }
+        return removeBinding;
     }
 
     private void ensureLowestRankIsWaived() {
@@ -121,11 +140,17 @@ class BindingManager implements ComponentCallbacks2 {
         if (lowestRanked == mWaivedConnection) return;
         if (mWaivedConnection != null) {
             assert mConnections.contains(mWaivedConnection);
-            addModerateBinding(mWaivedConnection);
+            addBinding(mWaivedConnection);
+            if (mOnChangedImplicitly != null) {
+                mOnChangedImplicitly.accept(mWaivedConnection);
+            }
             mWaivedConnection = null;
         }
         if (!mConnections.contains(lowestRanked)) return;
-        removeModerateBinding(lowestRanked);
+        removeBinding(lowestRanked);
+        if (mOnChangedImplicitly != null) {
+            mOnChangedImplicitly.accept(lowestRanked);
+        }
         mWaivedConnection = lowestRanked;
     }
 
@@ -137,8 +162,14 @@ class BindingManager implements ComponentCallbacks2 {
      */
     void onSentToBackground() {
         assert LauncherThread.runningOnLauncherThread();
+
+        RecordHistogram.recordCount1000Histogram(
+                "Android.BindingManger.ConnectionsDroppedDueToMaxSize",
+                mConnectionsDroppedDueToMaxSize);
+        mConnectionsDroppedDueToMaxSize = 0;
+
         if (mConnections.isEmpty()) return;
-        LauncherThread.postDelayed(mDelayedClearer, MODERATE_BINDING_POOL_CLEARER_DELAY_MILLIS);
+        LauncherThread.postDelayed(mDelayedClearer, BINDING_POOL_CLEARER_DELAY_MILLIS);
     }
 
     /** Called when the embedding application is brought to foreground. */
@@ -148,67 +179,81 @@ class BindingManager implements ComponentCallbacks2 {
     }
 
     /**
-     * @return the number of moderate bindings that are the result of just BindingManager.
+     * @return the number of exclusive bindings that are the result of just BindingManager.
      */
-    int getExclusiveModerateBindingCount() {
-        int exclusiveModerateBindingCount = 0;
+    int getExclusiveBindingCount() {
+        int exclusiveBindingCount = 0;
         for (ChildProcessConnection connection : mConnections) {
-            if (!isExclusiveModerateBinding(connection)) continue;
-
-            exclusiveModerateBindingCount++;
+            if (ChildProcessConnection.supportNotPerceptibleBinding()
+                    ? isExclusiveNotPerceptibleBinding(connection)
+                    : isExclusiveVisibleBinding(connection)) {
+                exclusiveBindingCount++;
+            }
         }
-        return exclusiveModerateBindingCount;
+        return exclusiveBindingCount;
     }
 
     /**
-     * @param connection The connection to check if BindingManager has a moderate binding for.
+     * @param connection The connection to check if BindingManager has a binding for.
      * @return whether this BindingManager has an exclusive moderate connection.
      */
-    boolean hasExclusiveModerateBinding(ChildProcessConnection connection) {
-        return mConnections.contains(connection) && isExclusiveModerateBinding(connection);
+    boolean hasExclusiveVisibleBinding(ChildProcessConnection connection) {
+        return !ChildProcessConnection.supportNotPerceptibleBinding()
+                && mConnections.contains(connection)
+                && isExclusiveVisibleBinding(connection);
     }
 
-    private boolean isExclusiveModerateBinding(ChildProcessConnection connection) {
-        return connection != mWaivedConnection && !connection.isStrongBindingBound()
-                && connection.getModerateBindingCount() == 1;
+    private boolean isExclusiveNotPerceptibleBinding(ChildProcessConnection connection) {
+        return connection != mWaivedConnection
+                && !connection.isStrongBindingBound()
+                && !connection.isVisibleBindingBound()
+                && connection.getNotPerceptibleBindingCount() == 1;
     }
 
-    /**
-     * Construct instance without maxsize and can support arbitrary number of connections.
-     */
-    BindingManager(Context context, Iterable<ChildProcessConnection> ranking) {
-        this(-1, ranking, context);
+    private boolean isExclusiveVisibleBinding(ChildProcessConnection connection) {
+        return connection != mWaivedConnection
+                && !connection.isStrongBindingBound()
+                && !connection.isNotPerceptibleBindingBound()
+                && connection.getVisibleBindingCount() == 1;
     }
 
     /**
      * Construct instance with maxSize.
+     *
+     * @param context Android's context.
+     * @param maxSize The maximum number of connections or NO_MAX_SIZE for unlimited connections.
+     * @param ranking The ranking of {@link ChildProcessConnection}s based on importance.
+     * @param onChangedImplicitly A callback that is run when connections are bound/unbound to/from
+     *     a service binding implicitly. Note that this does not report the binding change is for
+     *     explict connection (e.g. the added connection on addConnection()), but this reports for
+     *     the connections that are bound/unbound for ensureLowestRankIsWaived(),
+     *     removeOldConnections(). When multiple connections are bound/unbound in a row, this skips
+     *     some of them but just reports the lowest ranked connection.
      */
-    BindingManager(Context context, int maxSize, Iterable<ChildProcessConnection> ranking) {
-        this(maxSize, ranking, context);
-        assert maxSize > 0;
-    }
-
-    private BindingManager(int maxSize, Iterable<ChildProcessConnection> ranking, Context context) {
+    BindingManager(
+            Context context,
+            int maxSize,
+            Iterable<ChildProcessConnection> ranking,
+            @Nullable Consumer<ChildProcessConnection> onChangedImplicitly) {
         assert LauncherThread.runningOnLauncherThread();
-        Log.i(TAG, "Moderate binding enabled: maxSize=%d", maxSize);
+        Log.i(TAG, "Visible binding enabled: maxSize=%d", maxSize);
 
         mMaxSize = maxSize;
+        mOnChangedImplicitly = onChangedImplicitly;
         mRanking = ranking;
-        assert mMaxSize > 0 || mMaxSize == -1;
+        if (mMaxSize <= 0 && mMaxSize != NO_MAX_SIZE) {
+            throw new IllegalArgumentException(
+                    "maxSize must be a positive integer or NO_MAX_SIZE. Was " + maxSize);
+        }
 
-        mDelayedClearer = new Runnable() {
-            @Override
-            public void run() {
-                Log.i(TAG, "Release moderate connections: %d", mConnections.size());
-                // Tests may not load the native library which is required for
-                // recording histograms.
-                if (LibraryLoader.getInstance().isInitialized()) {
-                    RecordHistogram.recordCount1MHistogram(
-                            "Android.ModerateBindingCount", mConnections.size());
-                }
-                removeAllConnections();
-            }
-        };
+        mDelayedClearer =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(TAG, "Release visible connections: %d", mConnections.size());
+                        removeAllConnections();
+                    }
+                };
 
         // Note that it is safe to call Context.registerComponentCallbacks from a background
         // thread.
@@ -221,14 +266,22 @@ class BindingManager implements ComponentCallbacks2 {
         // Note that the size of connections is currently fairly small (40).
         // If it became bigger we should consider using an alternate data structure.
         boolean alreadyInQueue = !mConnections.add(connection);
-        if (!alreadyInQueue) addModerateBinding(connection);
-        assert mMaxSize == -1 || mConnections.size() <= mMaxSize;
+        if (alreadyInQueue) return;
+
+        addBinding(connection);
+
+        if (mMaxSize != NO_MAX_SIZE && mConnections.size() == mMaxSize + 1) {
+            mConnectionsDroppedDueToMaxSize++;
+            removeOldConnections(1);
+            ensureLowestRankIsWaived();
+        }
+        assert mMaxSize == NO_MAX_SIZE || mConnections.size() <= mMaxSize;
     }
 
     public void removeConnection(ChildProcessConnection connection) {
         assert LauncherThread.runningOnLauncherThread();
         boolean alreadyInQueue = mConnections.remove(connection);
-        if (alreadyInQueue) removeModerateBindingIfNeeded(connection);
+        if (alreadyInQueue) removeBindingIfNeeded(connection);
         assert !mConnections.contains(connection);
     }
 
@@ -238,11 +291,19 @@ class BindingManager implements ComponentCallbacks2 {
         ensureLowestRankIsWaived();
     }
 
-    private void addModerateBinding(ChildProcessConnection connection) {
-        connection.addModerateBinding();
+    private void addBinding(ChildProcessConnection connection) {
+        if (ChildProcessConnection.supportNotPerceptibleBinding()) {
+            connection.addNotPerceptibleBinding();
+            return;
+        }
+        connection.addVisibleBinding();
     }
 
-    private void removeModerateBinding(ChildProcessConnection connection) {
-        connection.removeModerateBinding();
+    private void removeBinding(ChildProcessConnection connection) {
+        if (ChildProcessConnection.supportNotPerceptibleBinding()) {
+            connection.removeNotPerceptibleBinding();
+            return;
+        }
+        connection.removeVisibleBinding();
     }
 }

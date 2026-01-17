@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2016 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2016 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 <org.chromium.chrome.browser.ntp.NewTabPageLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -21,27 +23,21 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <ViewStub
-            android:id="@+id/cryptid_holder"
-            android:layout="@layout/new_tab_page_cryptid_holder"
-            android:layout_width="@dimen/cryptid_width_in_logo_wrapper"
-            android:layout_height="@dimen/cryptid_height_in_logo_wrapper"
-            android:layout_gravity="bottom|start" />
-
-        <org.chromium.chrome.browser.logo.LogoView
-            android:id="@+id/search_provider_logo"
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/ntp_logo_height"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
-            android:layout_marginTop="@dimen/ntp_logo_margin_top"
-            android:layout_marginBottom="@dimen/ntp_logo_margin_bottom" />
-
+        <include layout="@layout/logo_view_layout"/>
     </FrameLayout>
 
     <!-- Search box -->
     <include layout="@layout/fake_search_box_layout"/>
+
+    <ViewStub
+        android:id="@+id/composeplate_view_stub"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/composeplate_view_height"
+        android:layout_marginTop="@dimen/composeplate_view_margin_top"
+        android:layout_marginStart="@dimen/mvt_container_lateral_margin"
+        android:layout_marginEnd="@dimen/mvt_container_lateral_margin"
+        android:layout="@layout/composeplate_view_layout"
+        android:visibility="gone" />
 
     <!-- Query tiles -->
     <FrameLayout
@@ -51,32 +47,29 @@
         android:layout_marginTop="16dp"
         android:visibility="gone"/>
 
-    <!-- Middle spacer -->
-    <View
-        android:id="@+id/ntp_middle_spacer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_weight="0"
-        android:visibility="invisible" />
-
-    <!-- Insertion point of the SiteSectionView, see NewTabPageLayout#insertSiteSection() -->
-
     <ViewStub
-        android:id="@+id/explore_sites_stub"
+        android:id="@+id/mv_tiles_layout_stub"
+        android:inflatedId="@+id/mv_tiles_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:inflatedId="@+id/explore_sites"
-        android:layout_marginBottom="16dp"
-        android:layout="@layout/explore_sites_section" />
+        android:layout_marginTop="@dimen/mvt_container_top_margin"
+        android:layout_marginLeft="@dimen/mvt_container_lateral_margin"
+        android:layout_marginRight="@dimen/mvt_container_lateral_margin"
+        android:layout="@layout/mv_tiles_layout" />
 
-    <!-- Site suggestion tile grid placeholder -->
     <ViewStub
-        android:id="@+id/tile_grid_placeholder_stub"
+        android:id="@+id/home_modules_recycler_view_stub"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:inflatedId="@+id/tile_grid_placeholder"
-        android:layout="@layout/new_tab_page_tile_grid_placeholder" />
+        android:layout_height="match_parent"
+        android:layout="@layout/home_modules_recycler_view_layout"
+        android:visibility="gone" />
+
+    <!-- Single tab card -->
+    <ViewStub
+        android:id="@+id/tab_switcher_module_container_stub"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout="@layout/tab_switcher_module_container" />
 
     <ViewStub
         android:id="@+id/search_resumption_module_container_stub"
@@ -84,16 +77,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/search_resumption_module_margin_top"
         android:layout="@layout/search_resumption_module_layout" />
-
-    <!-- Video tutorial IPH card -->
-    <ViewStub
-        android:id="@+id/video_iph_stub"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp"
-        android:layout="@layout/video_tutorial_iph_card"
-        android:inflatedId="@+id/video_iph_card"/>
 
     <!-- Spacer for when there is no search provider logo. -->
     <View

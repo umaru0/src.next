@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,8 @@ class TestImageLoader {
 
   ~TestImageLoader();
 
-  // Loads an image to be used in test from |extension|.
-  // The image will be loaded from the relative path |image_path|.
+  // Loads an image to be used in test from `extension`.
+  // The image will be loaded from the relative path `image_path`.
   static SkBitmap LoadAndGetExtensionBitmap(const Extension* extension,
                                             const std::string& image_path,
                                             int size);

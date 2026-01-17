@@ -1,14 +1,16 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.toolbar.top;
 
-import org.chromium.base.ContextUtils;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeMethods;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.cc.input.OffsetTag;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
 import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar.DrawingInfo;
@@ -18,6 +20,7 @@ import org.chromium.ui.resources.ResourceManager;
 
 /** A SceneLayer to render the top toolbar. This is the "view" piece of the top toolbar overlay. */
 @JNINamespace("android")
+@NullMarked
 class TopToolbarSceneLayer extends SceneOverlayLayer {
     /** Pointer to native TopToolbarSceneLayer. */
     private long mNativePtr;
@@ -26,7 +29,8 @@ class TopToolbarSceneLayer extends SceneOverlayLayer {
     private final Supplier<ResourceManager> mResourceManagerSupplier;
 
     /** A simple view binder that pushes the whole model to the view updater. */
-    public static void bind(PropertyModel model, TopToolbarSceneLayer view, PropertyKey key) {
+    public static void bind(
+            PropertyModel model, TopToolbarSceneLayer view, @Nullable PropertyKey key) {
         view.pushProperties(model);
     }
 
@@ -40,42 +44,53 @@ class TopToolbarSceneLayer extends SceneOverlayLayer {
     /** Push all information about the texture to native at once. */
     private void pushProperties(PropertyModel model) {
         if (mResourceManagerSupplier.get() == null) return;
-        TopToolbarSceneLayerJni.get().updateToolbarLayer(mNativePtr, TopToolbarSceneLayer.this,
-                mResourceManagerSupplier.get(), model.get(TopToolbarOverlayProperties.RESOURCE_ID),
-                model.get(TopToolbarOverlayProperties.TOOLBAR_BACKGROUND_COLOR),
-                model.get(TopToolbarOverlayProperties.URL_BAR_RESOURCE_ID),
-                model.get(TopToolbarOverlayProperties.URL_BAR_COLOR),
-                model.get(TopToolbarOverlayProperties.Y_OFFSET),
-                model.get(TopToolbarOverlayProperties.SHOW_SHADOW),
-                model.get(TopToolbarOverlayProperties.VISIBLE), ContextUtils.getAppSharedPreferences().getBoolean("enable_bottom_toolbar", false));
-
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.DISABLE_COMPOSITED_PROGRESS_BAR)) {
-            return;
-        }
+        TopToolbarSceneLayerJni.get()
+                .updateToolbarLayer(
+                        mNativePtr,
+                        mResourceManagerSupplier.get(),
+                        model.get(TopToolbarOverlayProperties.RESOURCE_ID),
+                        model.get(TopToolbarOverlayProperties.TOOLBAR_BACKGROUND_COLOR),
+                        model.get(TopToolbarOverlayProperties.URL_BAR_RESOURCE_ID),
+                        model.get(TopToolbarOverlayProperties.URL_BAR_COLOR),
+                        model.get(TopToolbarOverlayProperties.X_OFFSET),
+                        model.get(TopToolbarOverlayProperties.CONTENT_OFFSET),
+                        model.get(TopToolbarOverlayProperties.SHOW_SHADOW),
+                        model.get(TopToolbarOverlayProperties.VISIBLE),
+                        model.get(TopToolbarOverlayProperties.ANONYMIZE),
+                        model.get(TopToolbarOverlayProperties.TOOLBAR_OFFSET_TAG));
 
         DrawingInfo progressInfo = model.get(TopToolbarOverlayProperties.PROGRESS_BAR_INFO);
         if (progressInfo == null) return;
 
-        TopToolbarSceneLayerJni.get().updateProgressBar(mNativePtr, TopToolbarSceneLayer.this,
-                progressInfo.progressBarRect.left, progressInfo.progressBarRect.top,
-                progressInfo.progressBarRect.width(), progressInfo.progressBarRect.height(),
-                progressInfo.progressBarColor, progressInfo.progressBarBackgroundRect.left,
-                progressInfo.progressBarBackgroundRect.top,
-                progressInfo.progressBarBackgroundRect.width(),
-                progressInfo.progressBarBackgroundRect.height(),
-                progressInfo.progressBarBackgroundColor);
+        TopToolbarSceneLayerJni.get()
+                .updateProgressBar(
+                        mNativePtr,
+                        progressInfo.progressBarRect.left,
+                        progressInfo.progressBarRect.top,
+                        progressInfo.progressBarRect.width(),
+                        progressInfo.progressBarRect.height(),
+                        progressInfo.progressBarColor,
+                        progressInfo.progressBarBackgroundRect.left,
+                        progressInfo.progressBarBackgroundRect.top,
+                        progressInfo.progressBarBackgroundRect.width(),
+                        progressInfo.progressBarBackgroundRect.height(),
+                        progressInfo.progressBarBackgroundColor,
+                        progressInfo.progressBarStaticBackgroundRect.left,
+                        progressInfo.progressBarStaticBackgroundRect.width(),
+                        progressInfo.progressBarStaticBackgroundColor,
+                        progressInfo.cornerRadius,
+                        progressInfo.progressBarVisualUpdateAvailable);
     }
 
     @Override
     public void setContentTree(SceneLayer contentTree) {
-        TopToolbarSceneLayerJni.get().setContentTree(
-                mNativePtr, TopToolbarSceneLayer.this, contentTree);
+        TopToolbarSceneLayerJni.get().setContentTree(mNativePtr, contentTree);
     }
 
     @Override
     protected void initializeNative() {
         if (mNativePtr == 0) {
-            mNativePtr = TopToolbarSceneLayerJni.get().init(TopToolbarSceneLayer.this);
+            mNativePtr = TopToolbarSceneLayerJni.get().init(this);
         }
         assert mNativePtr != 0;
     }
@@ -88,17 +103,40 @@ class TopToolbarSceneLayer extends SceneOverlayLayer {
 
     @NativeMethods
     interface Natives {
-        long init(TopToolbarSceneLayer caller);
-        void setContentTree(long nativeTopToolbarSceneLayer, TopToolbarSceneLayer caller,
-                SceneLayer contentTree);
-        void updateToolbarLayer(long nativeTopToolbarSceneLayer, TopToolbarSceneLayer caller,
-                ResourceManager resourceManager, int resourceId, int toolbarBackgroundColor,
-                int urlBarResourceId, int urlBarColor, float contentOffset, boolean showShadow,
-                boolean visible, boolean enableBottomToolbar);
-        void updateProgressBar(long nativeTopToolbarSceneLayer, TopToolbarSceneLayer caller,
-                int progressBarX, int progressBarY, int progressBarWidth, int progressBarHeight,
-                int progressBarColor, int progressBarBackgroundX, int progressBarBackgroundY,
-                int progressBarBackgroundWidth, int progressBarBackgroundHeight,
-                int progressBarBackgroundColor);
+        long init(TopToolbarSceneLayer self);
+
+        void setContentTree(long nativeTopToolbarSceneLayer, SceneLayer contentTree);
+
+        void updateToolbarLayer(
+                long nativeTopToolbarSceneLayer,
+                ResourceManager resourceManager,
+                int resourceId,
+                int toolbarBackgroundColor,
+                int urlBarResourceId,
+                int urlBarColor,
+                float xOffset,
+                float contentOffset,
+                boolean showShadow,
+                boolean visible,
+                boolean anonymize,
+                @Nullable OffsetTag offsetTag);
+
+        void updateProgressBar(
+                long nativeTopToolbarSceneLayer,
+                int progressBarX,
+                int progressBarY,
+                int progressBarWidth,
+                int progressBarHeight,
+                int progressBarColor,
+                int progressBarBackgroundX,
+                int progressBarBackgroundY,
+                int progressBarBackgroundWidth,
+                int progressBarBackgroundHeight,
+                int progressBarBackgroundColor,
+                int progressBarStaticBackgroundX,
+                int progressBarStaticBackgroundWidth,
+                int progressBarStaticBackgroundColor,
+                float cornerRadius,
+                boolean progressBarVisualUpdateAvailable);
     }
 }

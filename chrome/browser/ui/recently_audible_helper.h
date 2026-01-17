@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ class RecentlyAudibleHelper
   // Registers the provided repeating callback for notifications. Destroying
   // the returned subscription will unregister the callback. This is safe to do
   // while in the context of the callback itself.
-  base::CallbackListSubscription RegisterCallbackForTesting(
+  base::CallbackListSubscription RegisterRecentlyAudibleChangedCallback(
       const Callback& callback);
 
   // Allows replacing the tick clock that is used by this class. Setting it back

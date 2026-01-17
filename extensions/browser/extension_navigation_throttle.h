@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,6 @@
 
 #include "content/public/browser/navigation_throttle.h"
 
-namespace content {
-class NavigationHandle;
-}
-
 namespace extensions {
 
 // This class allows the extensions subsystem to have control over navigations
@@ -18,7 +14,7 @@ namespace extensions {
 class ExtensionNavigationThrottle : public content::NavigationThrottle {
  public:
   explicit ExtensionNavigationThrottle(
-      content::NavigationHandle* navigation_handle);
+      content::NavigationThrottleRegistry& reigstry);
 
   ExtensionNavigationThrottle(const ExtensionNavigationThrottle&) = delete;
   ExtensionNavigationThrottle& operator=(const ExtensionNavigationThrottle&) =

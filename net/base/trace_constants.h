@@ -1,11 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef NET_BASE_TRACE_CONSTANTS_H_
 #define NET_BASE_TRACE_CONSTANTS_H_
 
-#include "base/trace_event/common/trace_event_common.h"
+#include "base/trace_event/trace_event.h"
 
 namespace net {
 

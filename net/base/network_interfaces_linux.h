@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,9 +18,9 @@
 
 namespace net::internal {
 
-typedef char* (*GetInterfaceNameFunction)(int interface_index, char* ifname);
+using GetInterfaceNameFunction = std::string (*)(int interface_index);
 
-typedef std::string (*GetInterfaceSSIDFunction)(const std::string& ifname);
+using GetInterfaceSSIDFunction = std::string (*)(const std::string& ifname);
 
 NET_EXPORT bool GetNetworkListImpl(
     NetworkInterfaceList* networks,

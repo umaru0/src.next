@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,11 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "content/public/test/browser_test.h"
+#include "ui/gfx/native_widget_types.h"
 
 class AskGoogleForSuggestionsDialogTest : public DialogBrowserTest {
  public:
-  AskGoogleForSuggestionsDialogTest() {}
+  AskGoogleForSuggestionsDialogTest() = default;
 
   AskGoogleForSuggestionsDialogTest(const AskGoogleForSuggestionsDialogTest&) =
       delete;
@@ -30,8 +31,9 @@ class AskGoogleForSuggestionsDialogTest : public DialogBrowserTest {
 
     // The toolkit-views version of the dialog does not utilize the anchor_view
     // and origin parameters passed to this function. Pass dummy values.
-    chrome::ShowConfirmBubble(browser()->window()->GetNativeWindow(), nullptr,
-                              gfx::Point(), std::move(model));
+    chrome::ShowConfirmBubble(browser()->window()->GetNativeWindow(),
+                              gfx::NativeView(), gfx::Point(),
+                              std::move(model));
   }
 };
 

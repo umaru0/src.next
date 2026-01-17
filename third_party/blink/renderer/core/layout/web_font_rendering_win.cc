@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,12 +28,6 @@ WebFontPrewarmer* WebFontRendering::GetFontPrewarmer() {
 void WebFontRendering::SetFontRenderingClient(
     WebFontRenderingClient* rendering_client) {
   FontCache::SetFontPrewarmer(rendering_client);
-  // TODO(yosin): Call `FontThreadPool::SetFontRenderingClient()`.
-}
-
-// static
-void WebFontRendering::AddSideloadedFontForTesting(sk_sp<SkTypeface> typeface) {
-  FontCache::AddSideloadedFontForTesting(std::move(typeface));
 }
 
 // static
@@ -62,11 +56,6 @@ void WebFontRendering::SetAntialiasedTextEnabled(bool enabled) {
 // static
 void WebFontRendering::SetLCDTextEnabled(bool enabled) {
   FontCache::SetLCDTextEnabled(enabled);
-}
-
-// static
-void WebFontRendering::SetUseSkiaFontFallback(bool use_skia_font_fallback) {
-  FontCache::SetUseSkiaFontFallback(use_skia_font_fallback);
 }
 
 }  // namespace blink

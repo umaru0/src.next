@@ -1,19 +1,24 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.omnibox;
 
-import org.chromium.ui.base.PageTransition;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxLoadUrlParams;
 
 /**
  * Delegate interface that allows implementers to override the default URL loading behavior of the
  * LocationBar.
  */
+@NullMarked
 public interface OverrideUrlLoadingDelegate {
     /**
-     * Returns true if the delegate will handle loading for the given parameters.
+     * Evaluate whether supplied LoadUrlParams need special handling.
+     *
+     * @param params the parameters specifying what URL to load - and how
+     * @param incognito whether URL is being opened from an incognito mode
+     * @return true if the delegate will handle loading for the given parameters
      */
-    boolean willHandleLoadUrlWithPostData(String url, @PageTransition int transition,
-            String postDataType, byte[] postData, boolean incognito);
+    boolean willHandleLoadUrlWithPostData(OmniboxLoadUrlParams params, boolean incognito);
 }

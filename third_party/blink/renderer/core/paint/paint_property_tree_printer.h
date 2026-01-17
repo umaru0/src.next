@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,14 +34,14 @@ CORE_EXPORT void ShowTransformPropertyTree(
 CORE_EXPORT void ShowClipPropertyTree(const blink::LocalFrameView& rootFrame);
 CORE_EXPORT void ShowEffectPropertyTree(const blink::LocalFrameView& rootFrame);
 CORE_EXPORT void ShowScrollPropertyTree(const blink::LocalFrameView& rootFrame);
-CORE_EXPORT String
-TransformPropertyTreeAsString(const blink::LocalFrameView& rootFrame);
-CORE_EXPORT String
-ClipPropertyTreeAsString(const blink::LocalFrameView& rootFrame);
-CORE_EXPORT String
-EffectPropertyTreeAsString(const blink::LocalFrameView& rootFrame);
-CORE_EXPORT String
-ScrollPropertyTreeAsString(const blink::LocalFrameView& rootFrame);
+CORE_EXPORT blink::String TransformPropertyTreeAsString(
+    const blink::LocalFrameView& rootFrame);
+CORE_EXPORT blink::String ClipPropertyTreeAsString(
+    const blink::LocalFrameView& rootFrame);
+CORE_EXPORT blink::String EffectPropertyTreeAsString(
+    const blink::LocalFrameView& rootFrame);
+CORE_EXPORT blink::String ScrollPropertyTreeAsString(
+    const blink::LocalFrameView& rootFrame);
 
 #endif  // if DCHECK_IS_ON()
 

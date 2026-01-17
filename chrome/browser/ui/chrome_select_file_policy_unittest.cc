@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 #if defined(USE_AURA)
@@ -31,11 +32,12 @@ namespace {
 
 class FileSelectionUser : public ui::SelectFileDialog::Listener {
  public:
-  FileSelectionUser() : file_selection_initialisation_in_progress(false) {}
+  FileSelectionUser() = default;
 
   ~FileSelectionUser() override {
-    if (select_file_dialog_.get())
+    if (select_file_dialog_.get()) {
       select_file_dialog_->ListenerDestroyed();
+    }
   }
 
   void StartFileSelection() {
@@ -47,30 +49,28 @@ class FileSelectionUser : public ui::SelectFileDialog::Listener {
     const std::u16string title = std::u16string();
 
     file_selection_initialisation_in_progress = true;
-    select_file_dialog_->SelectFile(ui::SelectFileDialog::SELECT_OPEN_FILE,
-                                    title, file_path, NULL, 0,
-                                    base::FilePath::StringType(), NULL, NULL);
+    select_file_dialog_->SelectFile(
+        ui::SelectFileDialog::SELECT_OPEN_FILE, title, file_path, nullptr, 0,
+        base::FilePath::StringType(), gfx::NativeWindow());
     file_selection_initialisation_in_progress = false;
   }
 
   // ui::SelectFileDialog::Listener implementation.
-  void FileSelected(const base::FilePath& path,
-                    int index,
-                    void* params) override {
+  void FileSelected(const ui::SelectedFileInfo& file, int index) override {
     ASSERT_FALSE(file_selection_initialisation_in_progress);
   }
-  void MultiFilesSelected(const std::vector<base::FilePath>& files,
-                          void* params) override {
+  void MultiFilesSelected(
+      const std::vector<ui::SelectedFileInfo>& files) override {
     ASSERT_FALSE(file_selection_initialisation_in_progress);
   }
-  void FileSelectionCanceled(void* params) override {
+  void FileSelectionCanceled() override {
     ASSERT_FALSE(file_selection_initialisation_in_progress);
   }
 
  private:
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
-  bool file_selection_initialisation_in_progress;
+  bool file_selection_initialisation_in_progress = false;
 };
 
 }  // namespace

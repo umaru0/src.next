@@ -1,16 +1,18 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <stddef.h>
 
+#include <array>
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -33,7 +35,8 @@ struct TestEntry {
   const char* title;
   const int days_ago;
   base::Time time;  // Filled by SetUp.
-} test_entries[] = {
+};
+auto test_entries = std::to_array<TestEntry>({
     // This one is visited super long ago so it will be in a different database
     // from the next appearance of it at the end.
     {"http://example.com/", "Other", 180},
@@ -64,7 +67,7 @@ struct TestEntry {
     {"http://evil.test/example", "Host Evil domain", 18},
     {"http://evil.com/example.test", "Host Evil path", 19},
     {"https://random.test/", "Host random example.test", 20},
-};
+});
 
 // Returns true if the nth result in the given results set matches. It will
 // return false on a non-match or if there aren't enough results.
@@ -126,7 +129,7 @@ class HistoryQueryTest : public testing::Test {
       SCOPED_TRACE(testing::Message() << "i = " << i);
       QueryHistory(query_text, options, &results);
       ASSERT_EQ(1U, results.size());
-      EXPECT_TRUE(NthResultIs(results, 0, expected_results[i]));
+      UNSAFE_TODO(EXPECT_TRUE(NthResultIs(results, 0, expected_results[i])));
       options.end_time = results.back().visit_time();
     }
     QueryHistory(query_text, options, &results);
@@ -139,8 +142,10 @@ class HistoryQueryTest : public testing::Test {
       SCOPED_TRACE(testing::Message() << "i = " << i);
       QueryHistory(query_text, options, &results);
       ASSERT_EQ(2U, results.size());
-      EXPECT_TRUE(NthResultIs(results, 0, expected_results[i * 2]));
-      EXPECT_TRUE(NthResultIs(results, 1, expected_results[i * 2 + 1]));
+      UNSAFE_TODO(
+          EXPECT_TRUE(NthResultIs(results, 0, expected_results[i * 2])));
+      UNSAFE_TODO(
+          EXPECT_TRUE(NthResultIs(results, 1, expected_results[i * 2 + 1])));
       options.end_time = results.back().visit_time();
     }
 
@@ -174,12 +179,12 @@ class HistoryQueryTest : public testing::Test {
 
   void AddEntryToHistory(const TestEntry& entry) {
     // We need the ID scope and page ID so that the visit tracker can find it.
-    ContextID context_id = reinterpret_cast<ContextID>(1);
+    ContextID context_id = 1;
     GURL url(entry.url);
 
     history_->AddPage(url, entry.time, context_id, nav_entry_id_++, GURL(),
                       history::RedirectList(), ui::PAGE_TRANSITION_LINK,
-                      history::SOURCE_BROWSED, false, false);
+                      history::SOURCE_BROWSED, false);
     history_->SetPageTitle(url, base::UTF8ToUTF16(entry.title));
   }
 
@@ -451,12 +456,16 @@ TEST_F(HistoryQueryTest, TextSearchIDN) {
   struct QueryEntry {
     std::string query;
     size_t results_size;
-  } queries[] = {
-    { "bad query", 0 },
-    { std::string("xn--d1abbgf6aiiy.xn--p1ai"), 1 },
-    { base::WideToUTF8(L"\u043f\u0440\u0435\u0437"
-                       L"\u0438\u0434\u0435\u043d\u0442.\u0440\u0444"), 1, },
   };
+  auto queries = std::to_array<QueryEntry>({
+      {"bad query", 0},
+      {std::string("xn--d1abbgf6aiiy.xn--p1ai"), 1},
+      {
+          base::WideToUTF8(L"\u043f\u0440\u0435\u0437"
+                           L"\u0438\u0434\u0435\u043d\u0442.\u0440\u0444"),
+          1,
+      },
+  });
 
   for (size_t i = 0; i < std::size(queries); ++i) {
     QueryHistory(queries[i].query, options, &results);

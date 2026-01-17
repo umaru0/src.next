@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,9 @@
 
 #include <memory>
 #include <queue>
+
+#include "base/memory/raw_ptr.h"
+#include "base/task/common/lazy_now.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -63,7 +66,7 @@ class TimerTest : public testing::Test {
   // to the delay in seconds till the next pending delayed task is scheduled to
   // fire.
   bool TimeTillNextDelayedTask(base::TimeDelta* time) const {
-    base::sequence_manager::LazyNow lazy_now(platform_->NowTicks());
+    base::LazyNow lazy_now(platform_->NowTicks());
     auto* scheduler_helper =
         platform_->GetMainThreadScheduler()->GetSchedulerHelperForTesting();
     scheduler_helper->ReclaimMemory();
@@ -464,7 +467,7 @@ TEST_F(TimerTest, RepeatInterval_NeverStarted) {
   TaskRunnerTimer<TimerTest> timer(GetTaskRunner(), this,
                                    &TimerTest::CountingTask);
 
-  EXPECT_TRUE(timer.RepeatInterval().is_zero());
+  EXPECT_FALSE(timer.RepeatInterval());
 }
 
 TEST_F(TimerTest, RepeatInterval_OneShotZero) {
@@ -472,7 +475,7 @@ TEST_F(TimerTest, RepeatInterval_OneShotZero) {
                                    &TimerTest::CountingTask);
   timer.StartOneShot(base::TimeDelta(), FROM_HERE);
 
-  EXPECT_TRUE(timer.RepeatInterval().is_zero());
+  EXPECT_FALSE(timer.RepeatInterval());
 }
 
 TEST_F(TimerTest, RepeatInterval_OneShotNonZero) {
@@ -480,7 +483,7 @@ TEST_F(TimerTest, RepeatInterval_OneShotNonZero) {
                                    &TimerTest::CountingTask);
   timer.StartOneShot(base::Seconds(10), FROM_HERE);
 
-  EXPECT_TRUE(timer.RepeatInterval().is_zero());
+  EXPECT_FALSE(timer.RepeatInterval());
 }
 
 TEST_F(TimerTest, RepeatInterval_Repeating) {
@@ -488,20 +491,20 @@ TEST_F(TimerTest, RepeatInterval_Repeating) {
                                    &TimerTest::CountingTask);
   timer.StartRepeating(base::Seconds(20), FROM_HERE);
 
-  EXPECT_EQ(base::Seconds(20), timer.RepeatInterval());
+  EXPECT_EQ(base::Seconds(20), *timer.RepeatInterval());
 }
 
 TEST_F(TimerTest, AugmentRepeatInterval) {
   TaskRunnerTimer<TimerTest> timer(GetTaskRunner(), this,
                                    &TimerTest::CountingTask);
   timer.StartRepeating(base::Seconds(10), FROM_HERE);
-  EXPECT_EQ(base::Seconds(10), timer.RepeatInterval());
+  EXPECT_EQ(base::Seconds(10), *timer.RepeatInterval());
   EXPECT_EQ(base::Seconds(10), timer.NextFireInterval());
 
   platform_->AdvanceClock(base::Seconds(2));
   timer.AugmentRepeatInterval(base::Seconds(10));
 
-  EXPECT_EQ(base::Seconds(20), timer.RepeatInterval());
+  EXPECT_EQ(base::Seconds(20), *timer.RepeatInterval());
   EXPECT_EQ(base::Seconds(18), timer.NextFireInterval());
 
   RunUntilDeadline(start_time_ + base::Seconds(50));
@@ -515,13 +518,13 @@ TEST_F(TimerTest, AugmentRepeatInterval_TimerFireDelayed) {
   TaskRunnerTimer<TimerTest> timer(GetTaskRunner(), this,
                                    &TimerTest::CountingTask);
   timer.StartRepeating(base::Seconds(10), FROM_HERE);
-  EXPECT_EQ(base::Seconds(10), timer.RepeatInterval());
+  EXPECT_EQ(base::Seconds(10), *timer.RepeatInterval());
   EXPECT_EQ(base::Seconds(10), timer.NextFireInterval());
 
   platform_->AdvanceClock(base::Seconds(123));  // Make the timer long overdue.
   timer.AugmentRepeatInterval(base::Seconds(10));
 
-  EXPECT_EQ(base::Seconds(20), timer.RepeatInterval());
+  EXPECT_EQ(base::Seconds(20), *timer.RepeatInterval());
   // The timer is overdue so it should be scheduled to fire immediatly.
   EXPECT_TRUE(timer.NextFireInterval().is_zero());
 }
@@ -677,7 +680,7 @@ class TaskObserver : public base::TaskObserver {
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  Vector<scoped_refptr<base::SingleThreadTaskRunner>>* run_order_;
+  raw_ptr<Vector<scoped_refptr<base::SingleThreadTaskRunner>>> run_order_;
 };
 
 }  // namespace
