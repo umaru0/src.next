@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,9 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_request_limiter.h"
+#include "components/permissions/permission_decision.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/permission_request_data.h"
 #include "url/origin.h"
 
 // A permission request that presents the user with a choice to allow or deny
@@ -27,8 +29,10 @@ class DownloadPermissionRequest : public permissions::PermissionRequest {
   ~DownloadPermissionRequest() override;
 
  private:
-  void PermissionDecided(ContentSetting result, bool is_one_time);
-  void DeleteRequest();
+  void PermissionDecided(
+      PermissionDecision decision,
+      bool is_final_decision,
+      const permissions::PermissionRequestData& request_data);
 
   base::WeakPtr<DownloadRequestLimiter::TabDownloadState> host_;
   url::Origin requesting_origin_;

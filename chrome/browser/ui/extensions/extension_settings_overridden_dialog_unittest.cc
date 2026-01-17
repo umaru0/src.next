@@ -1,19 +1,19 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/extensions/extension_settings_overridden_dialog.h"
 
 #include "base/test/metrics/histogram_tester.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
+#include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest.h"
-#include "extensions/common/value_builder.h"
 
 namespace {
 
@@ -42,14 +42,21 @@ class ExtensionSettingsOverriddenDialogUnitTest
     InitializeEmptyExtensionService();
   }
 
-  // Adds a new extension with the given |name| and |location| to the profile.
+  // Adds a new extension with the given `name` and `location` to the profile.
+  // If `include_extra_perms` is true, this also adds a simple permission to
+  // the extension (so that it's not considered a "simple override").
   const extensions::Extension* AddExtension(
       const char* name = "alpha",
       extensions::mojom::ManifestLocation location =
-          extensions::mojom::ManifestLocation::kInternal) {
-    scoped_refptr<const extensions::Extension> extension =
-        extensions::ExtensionBuilder(name).SetLocation(location).Build();
-    service()->AddExtension(extension.get());
+          extensions::mojom::ManifestLocation::kInternal,
+      bool include_extra_perms = true) {
+    extensions::ExtensionBuilder builder(name);
+    builder.SetLocation(location);
+    if (include_extra_perms) {
+      builder.AddAPIPermission("storage");
+    }
+    scoped_refptr<const extensions::Extension> extension = builder.Build();
+    registrar()->AddExtension(extension);
     return extension.get();
   }
 
@@ -84,9 +91,8 @@ TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
 TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
        WontShowForAnAcknowledgedExtension) {
   const extensions::Extension* extension = AddExtension();
-  GetExtensionPrefs()->UpdateExtensionPref(extension->id(),
-                                           kTestAcknowledgedPreference,
-                                           std::make_unique<base::Value>(true));
+  GetExtensionPrefs()->UpdateExtensionPref(
+      extension->id(), kTestAcknowledgedPreference, base::Value(true));
 
   ExtensionSettingsOverriddenDialog controller(
       CreateTestDialogParams(extension->id()), profile());
@@ -119,8 +125,9 @@ TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
                                       DialogResult::kChangeSettingsBack, 1);
 
   EXPECT_TRUE(registry()->disabled_extensions().Contains(extension->id()));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            GetExtensionPrefs()->GetDisableReasons(extension->id()));
+  EXPECT_THAT(GetExtensionPrefs()->GetDisableReasons(extension->id()),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
   EXPECT_FALSE(IsExtensionAcknowledged(extension->id()));
 }
 
@@ -228,8 +235,38 @@ TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
   EXPECT_TRUE(controller.ShouldShow());
   controller.OnDialogShown();
 
-  service()->UninstallExtension(
+  registrar()->UninstallExtension(
       extension->id(), extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
 
   controller.HandleDialogResult(DialogResult::kChangeSettingsBack);
+}
+
+// Tests that simple override extensions don't trigger the settings overridden
+// dialog.
+TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
+       SimpleOverrideExtensionDoesntTriggerDialog) {
+  const extensions::Extension* extension =
+      AddExtension("alpha", extensions::mojom::ManifestLocation::kInternal,
+                   /*include_extra_perms=*/false);
+
+  ExtensionSettingsOverriddenDialog controller(
+      CreateTestDialogParams(extension->id()), profile());
+  EXPECT_FALSE(controller.ShouldShow());
+  // The the extension should not be acknowledged. The latter is important to
+  // re-assess the extension in case it updates.
+  EXPECT_FALSE(IsExtensionAcknowledged(extension->id()));
+}
+
+// Tests that simple override extensions don't trigger the settings overridden
+// dialog.
+TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
+       NonSimpleOverrideExtensionAlwaysTriggersDialog) {
+  const extensions::Extension* extension =
+      AddExtension("alpha", extensions::mojom::ManifestLocation::kInternal,
+                   /*include_extra_perms=*/true);
+
+  ExtensionSettingsOverriddenDialog controller(
+      CreateTestDialogParams(extension->id()), profile());
+  // The dialog should always show.
+  EXPECT_TRUE(controller.ShouldShow());
 }

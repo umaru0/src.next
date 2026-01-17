@@ -1,270 +1,268 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.base;
 
-import static android.content.Context.UI_MODE_SERVICE;
-
-import android.app.UiModeManager;
-import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.res.Configuration;
+import android.content.pm.Signature;
 import android.os.Build;
-import android.text.TextUtils;
+import android.os.Process;
 
-import androidx.annotation.OptIn;
-import androidx.core.os.BuildCompat;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JniType;
 
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.compat.ApiHelperForP;
 import org.chromium.build.BuildConfig;
+import org.chromium.build.NativeLibraries;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.NullUnmarked;
+import org.chromium.build.annotations.Nullable;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * BuildInfo is a utility class providing easy access to {@link PackageInfo} information. This is
  * primarily of use for accessing package information from native code.
+ *
+ * <p>NOTE: This class is deprecated, You can find the appropriate utilities that lived here in
+ * AndroidInfo, ApkInfo or DeviceInfo.
  */
+@NullMarked
+@Deprecated
 public class BuildInfo {
     private static final String TAG = "BuildInfo";
-    private static final int MAX_FINGERPRINT_LENGTH = 128;
 
-    private static PackageInfo sBrowserPackageInfo;
-    private static ApplicationInfo sBrowserApplicationInfo;
-    private static boolean sInitialized;
+    /**
+     * The package name of the host app which has loaded WebView, retrieved from the application
+     * context. In the context of the SDK Runtime, the package name of the app that owns this
+     * particular instance of the SDK Runtime will also be included. e.g.
+     * com.google.android.sdksandbox:com:com.example.myappwithads
+     */
+    public final String hostPackageName;
 
-    /** Not a member variable to avoid creating the instance early (it is set early in start up). */
-    private static String sFirebaseAppId = "";
-
-    /** The application name (e.g. "Chrome"). For WebView, this is name of the embedding app. */
+    /**
+     * The application name (e.g. "Chrome"). For WebView, this is name of the embedding app.
+     * In the context of the SDK Runtime, this is the name of the app that owns this particular
+     * instance of the SDK Runtime.
+     */
     public final String hostPackageLabel;
-    /** By default: same as versionCode. For WebView: versionCode of the embedding app. */
-    public final long hostVersionCode;
-    /** The packageName of Chrome/WebView. Use application context for host app packageName. */
+
+    /**
+     * By default: same as versionCode. For WebView: versionCode of the embedding app. In the
+     * context of the SDK Runtime, this is the versionCode of the app that owns this particular
+     * instance of the SDK Runtime.
+     */
+    public final String hostVersionCode;
+
+    /**
+     * The packageName of Chrome/WebView. Use application context for host app packageName. Same as
+     * the host information within any child process.
+     */
     public final String packageName;
+
     /** The versionCode of the apk. */
-    public final long versionCode;
+    public final long versionCode = BuildConfig.VERSION_CODE;
+
     /** The versionName of Chrome/WebView. Use application context for host app versionName. */
     public final String versionName;
+
     /** Result of PackageManager.getInstallerPackageName(). Never null, but may be "". */
     public final String installerPackageName;
-    /** The versionCode of Play Services (for crash reporting). */
-    public final String gmsVersionCode;
+
     /** Formatted ABI string (for crash reporting). */
     public final String abiString;
+
     /** Truncated version of Build.FINGERPRINT (for crash reporting). */
     public final String androidBuildFingerprint;
-    /** Whether or not the device has apps installed for using custom themes. */
-    public final String customThemes;
+
     /** Product version as stored in Android resources. */
     public final String resourcesVersion;
+
     /** Whether we're running on Android TV or not */
     public final boolean isTV;
 
-    private static class Holder { private static BuildInfo sInstance = new BuildInfo(); }
+    /** Whether we're running on an Android Automotive OS device or not. */
+    public final boolean isAutomotive;
 
-    @CalledByNative
-    private static String[] getAll() {
-        BuildInfo buildInfo = getInstance();
-        String hostPackageName = ContextUtils.getApplicationContext().getPackageName();
-        return new String[] {
-                Build.BRAND,
-                Build.DEVICE,
-                Build.ID,
-                Build.MANUFACTURER,
-                Build.MODEL,
-                String.valueOf(Build.VERSION.SDK_INT),
-                Build.TYPE,
-                Build.BOARD,
-                hostPackageName,
-                String.valueOf(buildInfo.hostVersionCode),
-                buildInfo.hostPackageLabel,
-                buildInfo.packageName,
-                String.valueOf(buildInfo.versionCode),
-                buildInfo.versionName,
-                buildInfo.androidBuildFingerprint,
-                buildInfo.gmsVersionCode,
-                buildInfo.installerPackageName,
-                buildInfo.abiString,
-                sFirebaseAppId,
-                buildInfo.customThemes,
-                buildInfo.resourcesVersion,
-                String.valueOf(
-                        ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion),
-                isDebugAndroid() ? "1" : "0",
-                buildInfo.isTV ? "1" : "0",
-                Build.VERSION.INCREMENTAL,
-                Build.HARDWARE,
-                isAtLeastT() ? "1" : "0",
-        };
+    /** Whether we're running on an Android Foldable OS device or not. */
+    public final boolean isFoldable;
+
+    /**
+     * version of the FEATURE_VULKAN_DEQP_LEVEL, if available. Queried only on Android T or above
+     */
+    public final int vulkanDeqpLevel;
+
+    /**
+     * The SHA256 of the public certificate used to sign the host application. This will default to
+     * an empty string if we were unable to retrieve it.
+     */
+    @GuardedBy("mCertLock")
+    private @Nullable String mHostSigningCertSha256;
+
+    private final Object mCertLock = new Object();
+
+    private static class Holder {
+        private static final BuildInfo INSTANCE = new BuildInfo();
     }
 
-    private static String nullToEmpty(CharSequence seq) {
-        return seq == null ? "" : seq.toString();
+    @CalledByNative
+    private static @JniType("std::string") String lazyGetHostSigningCertSha256() {
+        return BuildInfo.getInstance().getHostSigningCertSha256();
+    }
+
+    public static void setGmsVersionCodeForTest(@JniType("std::string") String gmsVersionCode) {
+        DeviceInfo.setGmsVersionCodeForTest(gmsVersionCode);
     }
 
     /**
-     * Return the "long" version code of the given PackageInfo.
-     * Does the right thing for before/after Android P when this got wider.
+     * Return the "long" version code of the given PackageInfo. Does the right thing for
+     * before/after Android P when this got wider.
      */
     public static long packageVersionCode(PackageInfo pi) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return ApiHelperForP.getLongVersionCode(pi);
+            return pi.getLongVersionCode();
         } else {
             return pi.versionCode;
         }
     }
 
     /**
+     * @return CPU architecture name, see "arch:" in:
+     *     https://chromium.googlesource.com/chromium/src.git/+/master/docs/updater/protocol_3_1.md
+     */
+    public static String getArch() {
+        boolean is64Bit = Process.is64Bit();
+        if (NativeLibraries.sCpuFamily == NativeLibraries.CPU_FAMILY_ARM) {
+            return is64Bit ? "arm64" : "arm";
+        } else if (NativeLibraries.sCpuFamily == NativeLibraries.CPU_FAMILY_X86) {
+            return is64Bit ? "x86_64" : "x86";
+        }
+        return "";
+    }
+
+    /**
      * @param packageInfo Package for Chrome/WebView (as opposed to host app).
      */
     public static void setBrowserPackageInfo(PackageInfo packageInfo) {
-        assert !sInitialized;
-        sBrowserPackageInfo = packageInfo;
+        ApkInfo.setBrowserPackageInfo(packageInfo);
     }
 
     /**
      * @return ApplicationInfo for Chrome/WebView (as opposed to host app).
      */
     public ApplicationInfo getBrowserApplicationInfo() {
-        return sBrowserApplicationInfo;
+        return ApkInfo.getInstance().getBrowserApplicationInfo();
     }
 
     public static BuildInfo getInstance() {
-        return Holder.sInstance;
+        // Some tests mock out things BuildInfo is based on, so disable caching in tests to ensure
+        // such mocking is not defeated by caching.
+        if (BuildConfig.IS_FOR_TEST) {
+            return new BuildInfo();
+        }
+        return Holder.INSTANCE;
     }
 
+    /** The versionCode of Play Services. */
+    public String getGmsVersionCode() {
+        return DeviceInfo.getGmsVersionCode();
+    }
+
+    @SuppressWarnings("NullAway") // https://github.com/uber/NullAway/issues/98
     private BuildInfo() {
-        sInitialized = true;
-        try {
-            Context appContext = ContextUtils.getApplicationContext();
-            String hostPackageName = appContext.getPackageName();
-            PackageManager pm = appContext.getPackageManager();
-            PackageInfo pi = pm.getPackageInfo(hostPackageName, 0);
-            hostVersionCode = packageVersionCode(pi);
-            if (sBrowserPackageInfo != null) {
-                packageName = sBrowserPackageInfo.packageName;
-                versionCode = packageVersionCode(sBrowserPackageInfo);
-                versionName = nullToEmpty(sBrowserPackageInfo.versionName);
-                sBrowserApplicationInfo = sBrowserPackageInfo.applicationInfo;
-                sBrowserPackageInfo = null;
-            } else {
-                packageName = hostPackageName;
-                versionCode = hostVersionCode;
-                versionName = nullToEmpty(pi.versionName);
-                sBrowserApplicationInfo = appContext.getApplicationInfo();
-            }
+        hostPackageName = ApkInfo.getHostPackageName();
+        hostPackageLabel = ApkInfo.getHostPackageLabel();
+        hostVersionCode = ApkInfo.getHostVersionCode();
+        packageName = ApkInfo.getPackageName();
+        versionName = ApkInfo.getPackageVersionName();
+        installerPackageName = ApkInfo.getInstallerPackageName();
+        abiString = AndroidInfo.getAndroidSupportedAbis();
+        androidBuildFingerprint = AndroidInfo.getAndroidBuildFingerprint();
+        resourcesVersion = ApkInfo.getResourcesVersion();
+        isTV = DeviceInfo.isTV();
+        isAutomotive = DeviceInfo.isAutomotive();
+        isFoldable = DeviceInfo.isFoldable();
+        vulkanDeqpLevel = DeviceInfo.getVulkanDeqpLevel();
+    }
 
-            hostPackageLabel = nullToEmpty(pm.getApplicationLabel(pi.applicationInfo));
-            installerPackageName = nullToEmpty(pm.getInstallerPackageName(packageName));
+    /**
+     * Check if this is a debuggable build of Android. This is a rough approximation of the hidden
+     * API {@code Build.IS_DEBUGGABLE}.
+     */
+    public static boolean isDebugAndroid() {
+        return AndroidInfo.isDebugAndroid();
+    }
 
-            PackageInfo gmsPackageInfo = null;
-            try {
-                gmsPackageInfo = pm.getPackageInfo("com.google.android.gms", 0);
-            } catch (NameNotFoundException e) {
-                // TODO(b/197112084): Re-enable the logging
-                // Log.d(TAG, "GMS package is not found.");
-            }
-            gmsVersionCode = gmsPackageInfo != null
-                    ? String.valueOf(packageVersionCode(gmsPackageInfo))
-                    : "gms versionCode not available.";
+    /*
+     * Check if the app is declared debuggable in its manifest.
+     * In WebView, this refers to the host app.
+     */
+    public static boolean isDebugApp() {
+        return ApkInfo.isDebugApp();
+    }
 
-            String hasCustomThemes = "true";
-            try {
-                // Substratum is a theme engine that enables users to use custom themes provided
-                // by theme apps. Sometimes these can cause crashs if not installed correctly.
-                // These crashes can be difficult to debug, so knowing if the theme manager is
-                // present on the device is useful (http://crbug.com/820591).
-                pm.getPackageInfo("projekt.substratum", 0);
-            } catch (NameNotFoundException e) {
-                hasCustomThemes = "false";
-            }
-            customThemes = hasCustomThemes;
+    /**
+     * Check if this is either a debuggable build of Android or of the host app. Use this to enable
+     * developer-only features.
+     */
+    public static boolean isDebugAndroidOrApp() {
+        return isDebugAndroid() || isDebugApp();
+    }
 
-            String currentResourcesVersion = "Not Enabled";
-            // Controlled by target specific build flags.
-            if (BuildConfig.R_STRING_PRODUCT_VERSION != 0) {
-                try {
-                    // This value can be compared with the actual product version to determine if
-                    // corrupted resources were the cause of a crash. This can happen if the app
-                    // loads resources from the outdated package  during an update
-                    // (http://crbug.com/820591).
-                    currentResourcesVersion = ContextUtils.getApplicationContext().getString(
-                            BuildConfig.R_STRING_PRODUCT_VERSION);
-                } catch (Exception e) {
-                    currentResourcesVersion = "Not found";
+    @NullUnmarked
+    public String getHostSigningCertSha256() {
+        // We currently only make use of this certificate for calls from the storage access API
+        // within WebView. So we rather lazy load this value to avoid impacting app startup.
+        synchronized (mCertLock) {
+            if (mHostSigningCertSha256 == null) {
+                String certificate = "";
+
+                PackageInfo pi =
+                        PackageUtils.getPackageInfo(
+                                ContextUtils.getApplicationContext().getPackageName(),
+                                getPackageInfoFlags());
+
+                Signature[] signatures = getPackageSignatures(pi);
+                if (signatures != null) {
+                    try {
+                        MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+                        // The current signing certificate is always the last one in the list.
+                        byte[] digest =
+                                messageDigest.digest(
+                                        signatures[signatures.length - 1].toByteArray());
+                        certificate = PackageUtils.byteArrayToHexString(digest);
+                    } catch (NoSuchAlgorithmException e) {
+                        Log.w(TAG, "Unable to hash host app signature", e);
+                    }
                 }
-            }
-            resourcesVersion = currentResourcesVersion;
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                abiString = TextUtils.join(", ", Build.SUPPORTED_ABIS);
-            } else {
-                abiString = String.format("ABI1: %s, ABI2: %s", Build.CPU_ABI, Build.CPU_ABI2);
+                mHostSigningCertSha256 = certificate;
             }
 
-            // The value is truncated, as this is used for crash and UMA reporting.
-            androidBuildFingerprint = Build.FINGERPRINT.substring(
-                    0, Math.min(Build.FINGERPRINT.length(), MAX_FINGERPRINT_LENGTH));
-
-            // See https://developer.android.com/training/tv/start/hardware.html#runtime-check.
-            UiModeManager uiModeManager =
-                    (UiModeManager) appContext.getSystemService(UI_MODE_SERVICE);
-            isTV = uiModeManager != null
-                    && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
-
-        } catch (NameNotFoundException e) {
-            throw new RuntimeException(e);
+            return mHostSigningCertSha256;
         }
     }
 
-    /**
-     * Check if this is a debuggable build of Android. Use this to enable developer-only features.
-     * This is a rough approximation of the hidden API {@code Build.IS_DEBUGGABLE}.
-     */
-    public static boolean isDebugAndroid() {
-        return "eng".equals(Build.TYPE) || "userdebug".equals(Build.TYPE);
+    private int getPackageInfoFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return PackageManager.GET_SIGNING_CERTIFICATES;
+        }
+        return PackageManager.GET_SIGNATURES;
     }
 
-    /**
-     * Wrap BuildCompat.isAtLeastT. This enables it to be shadowed in Robolectric tests.
-     */
-    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
-    public static boolean isAtLeastT() {
-        return BuildCompat.isAtLeastT();
+    private Signature @Nullable [] getPackageSignatures(PackageInfo pi) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (pi.signingInfo == null) {
+                return null;
+            }
+            return pi.signingInfo.getSigningCertificateHistory();
+        }
+
+        return pi.signatures;
     }
-
-    /**
-     * Checks if the application targets pre-release SDK T.
-     * This must be manually maintained as the SDK goes through finalization!
-     * Avoid depending on this if possible; this is only intended for WebView.
-     */
-    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
-    public static boolean targetsAtLeastT() {
-        int target = ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion;
-
-        // Logic for pre-API-finalization:
-        // return BuildCompat.isAtLeastT() && target == Build.VERSION_CODES.CUR_DEVELOPMENT;
-
-        // Logic for smooth transition period so that both pre-finalization and final SDKs
-        // will return true, assuming T will be API 33.
-        // Keeping this until we upstream the public SDK is a reasonable transition period.
-        return target >= 33 ||
-                (BuildCompat.isAtLeastT() && target == Build.VERSION_CODES.CUR_DEVELOPMENT);
-
-        // Logic for public SDK release:
-        // return target >= Build.VERSION_CODES.TIRAMISU;
-    }
-
-    public static void setFirebaseAppId(String id) {
-        assert sFirebaseAppId.equals("");
-        sFirebaseAppId = id;
-    }
-
-    public static String getFirebaseAppId() {
-        return sFirebaseAppId;
-    }
-
 }

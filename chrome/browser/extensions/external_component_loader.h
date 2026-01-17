@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,9 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/profiles/profile.h"
+#include "extensions/buildflags/buildflags.h"
 
-namespace base {
-class DictionaryValue;
-}
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
@@ -38,7 +37,7 @@ class ExternalComponentLoader : public ExternalLoader {
   ~ExternalComponentLoader() override;
 
   void AddExternalExtension(const std::string& extension_id,
-                            base::DictionaryValue* prefs);
+                            base::Value::Dict& prefs);
 
   // The profile that this loader is associated with. It listens for
   // preference changes for that profile.

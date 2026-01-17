@@ -1,10 +1,12 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.night_mode;
 
 import androidx.annotation.IntDef;
+
+import org.chromium.build.annotations.NullMarked;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -15,6 +17,7 @@ import java.lang.annotation.RetentionPolicy;
  */
 @IntDef({ThemeType.SYSTEM_DEFAULT, ThemeType.LIGHT, ThemeType.DARK})
 @Retention(RetentionPolicy.SOURCE)
+@NullMarked
 public @interface ThemeType {
     // Values are used for indexing tables - should start from 0 and can't have gaps.
     int SYSTEM_DEFAULT = 0;

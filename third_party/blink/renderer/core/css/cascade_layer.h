@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,8 +28,8 @@ class CORE_EXPORT CascadeLayer final : public GarbageCollected<CascadeLayer> {
 
   // Getting or setting the order of a layer is only valid for canonical cascade
   // layers i.e. the unique layer representation for a particular tree scope.
-  const absl::optional<unsigned> GetOrder() const { return order_; }
-  void SetOrder(unsigned order) { order_ = order; }
+  const std::optional<uint16_t> GetOrder() const { return order_; }
+  void SetOrder(uint16_t order) { order_ = order; }
 
   CascadeLayer* GetOrAddSubLayer(const StyleRuleBase::LayerName& name);
 
@@ -45,7 +45,7 @@ class CORE_EXPORT CascadeLayer final : public GarbageCollected<CascadeLayer> {
   CascadeLayer* FindDirectSubLayer(const AtomicString&) const;
   void ComputeLayerOrderInternal(unsigned* next);
 
-  absl::optional<unsigned> order_;
+  std::optional<uint16_t> order_;
   AtomicString name_;
   HeapVector<Member<CascadeLayer>> direct_sub_layers_;
 };

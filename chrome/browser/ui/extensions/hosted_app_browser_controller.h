@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,13 +43,12 @@ class HostedAppBrowserController : public web_app::AppBrowserController,
   std::u16string GetTitle() const override;
   std::u16string GetAppShortName() const override;
   std::u16string GetFormattedUrlOrigin() const override;
-  GURL GetAppStartUrl() const override;
+  const GURL& GetAppStartUrl() const override;
   bool IsUrlInAppScope(const GURL& url) const override;
   bool CanUserUninstall() const override;
   void Uninstall(
       webapps::WebappUninstallSource webapp_uninstall_source) override;
   bool IsInstalled() const override;
-  bool IsHostedApp() const override;
 
  protected:
   // ExtensionUninstallDialog::Delegate:

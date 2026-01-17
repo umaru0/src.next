@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,9 +11,9 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_sync_data.h"
-#include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
+#include "chrome/browser/extensions/sync/extension_sync_data.h"
+#include "chrome/browser/extensions/sync/extension_sync_service.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,19 +26,20 @@
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/extension_specifics.pb.h"
-#include "components/sync/test/model/fake_sync_change_processor.h"
-#include "components/sync/test/model/sync_error_factory_mock.h"
+#include "components/sync/test/fake_sync_change_processor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 using content::BrowserThread;
 using extensions::Extension;
@@ -84,9 +85,9 @@ class ExtensionDisabledGlobalErrorTest
     size_t size_before = extension_registry()->enabled_extensions().size();
     const Extension* extension = InstallExtension(path_v1_, 1);
     if (!extension)
-      return NULL;
+      return nullptr;
     if (extension_registry()->enabled_extensions().size() != size_before + 1)
-      return NULL;
+      return nullptr;
     return extension;
   }
 
@@ -98,12 +99,12 @@ class ExtensionDisabledGlobalErrorTest
       int expected_change) {
     size_t size_before = extension_registry()->enabled_extensions().size();
     if (UpdateExtension(extension->id(), crx_path, expected_change))
-      return NULL;
+      return nullptr;
     content::RunAllTasksUntilIdle();
     EXPECT_EQ(size_before + expected_change,
               extension_registry()->enabled_extensions().size());
     if (extension_registry()->disabled_extensions().size() != 1u)
-      return NULL;
+      return nullptr;
 
     return extension_registry()->disabled_extensions().begin()->get();
   }
@@ -132,7 +133,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, AcceptPermissions) {
 
   ExtensionTestMessageListener listener("v2.onInstalled");
   listener.set_failure_message("FAILED");
-  extension_service()->GrantPermissionsAndEnableExtension(extension);
+  extensions::ExtensionRegistrar::Get(profile())
+      ->GrantPermissionsAndEnableExtension(*extension);
   EXPECT_EQ(size_before + 1, extension_registry()->enabled_extensions().size());
   EXPECT_EQ(0u, extension_registry()->disabled_extensions().size());
   ASSERT_FALSE(GetExtensionDisabledGlobalError());
@@ -184,7 +186,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
 
   // Navigate a tab to the disabled extension, it will show a permission
   // increase dialog.
-  GURL url = extension->GetResourceURL("");
+  GURL url = extension->url();
   int starting_tab_count = browser()->tab_strip_model()->count();
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -219,7 +221,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
   extensions::ExtensionSyncData sync_data =
       sync_service->CreateSyncData(*extension);
   UninstallExtension(extension_id);
-  extension = NULL;
+  extension = nullptr;
 
   // Install extension v1.
   InstallIncreasingPermissionExtensionV1();
@@ -243,8 +245,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
 
   sync_service->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   extensions::TestExtensionRegistryObserver install_observer(
       extension_registry());
   sync_service->ProcessSyncChanges(
@@ -259,9 +260,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest,
   ASSERT_TRUE(extension);
   EXPECT_EQ("2", extension->VersionString());
   EXPECT_EQ(1u, extension_registry()->disabled_extensions().size());
-  EXPECT_EQ(extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE,
-            ExtensionPrefs::Get(extension_service()->profile())
-                ->GetDisableReasons(extension_id));
+  EXPECT_THAT(ExtensionPrefs::Get(extension_service()->profile())
+                  ->GetDisableReasons(extension_id),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE));
   EXPECT_TRUE(GetExtensionDisabledGlobalError());
 }
 
@@ -301,8 +303,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, RemoteInstall) {
   ExtensionSyncService* sync_service = ExtensionSyncService::Get(profile());
   sync_service->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   extensions::TestExtensionRegistryObserver install_observer(
       extension_registry());
   sync_service->ProcessSyncChanges(
@@ -319,8 +320,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, RemoteInstall) {
   ASSERT_TRUE(extension);
   EXPECT_EQ("2", extension->VersionString());
   EXPECT_EQ(1u, extension_registry()->disabled_extensions().size());
-  EXPECT_EQ(extensions::disable_reason::DISABLE_REMOTE_INSTALL,
-            ExtensionPrefs::Get(extension_service()->profile())
-                ->GetDisableReasons(extension_id));
+  EXPECT_THAT(ExtensionPrefs::Get(extension_service()->profile())
+                  ->GetDisableReasons(extension_id),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_REMOTE_INSTALL));
   EXPECT_TRUE(GetExtensionDisabledGlobalError());
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,14 +13,9 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/buildflags/buildflags.h"
 
-#if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/download/download_shelf_controller.h"
-#endif
-
 class ChromeDownloadManagerDelegate;
 class DownloadHistory;
 class DownloadUIController;
-class ExtensionDownloadsEventRouter;
 class Profile;
 
 namespace content {
@@ -48,11 +43,13 @@ class DownloadCoreServiceImpl : public DownloadCoreService {
   extensions::ExtensionDownloadsEventRouter* GetExtensionEventRouter() override;
 #endif
   bool HasCreatedDownloadManager() override;
-  int NonMaliciousDownloadCount() const override;
-  void CancelDownloads() override;
+  int BlockingShutdownCount() const override;
+  void CancelDownloads(
+      DownloadCoreService::CancelDownloadsTrigger trigger) override;
   void SetDownloadManagerDelegateForTesting(
       std::unique_ptr<ChromeDownloadManagerDelegate> delegate) override;
   bool IsDownloadUiEnabled() override;
+  DownloadUIController* GetDownloadUIController() override;
   void SetDownloadHistoryForTesting(
       std::unique_ptr<DownloadHistory> download_history) override;
 
@@ -76,10 +73,6 @@ class DownloadCoreServiceImpl : public DownloadCoreService {
   // Note on destruction order: download_ui_ depends on download_history_ and
   // should be destroyed before the latter.
   std::unique_ptr<DownloadUIController> download_ui_;
-
-#if !BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<DownloadShelfController> download_shelf_controller_;
-#endif
 
 // On Android, GET downloads are not handled by the DownloadManager.
 // Once we have extensions on android, we probably need the EventRouter

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,6 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/feed/buildflags.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
@@ -40,7 +39,7 @@
 #include "chrome/browser/feed/feed_service_factory.h"
 #include "components/feed/core/v2/public/feed_service.h"
 #include "components/feed/core/v2/public/test/stub_feed_api.h"
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
 using testing::NiceMock;
 
@@ -51,7 +50,7 @@ class TestFeedApi : public feed::StubFeedApi {
  public:
   MOCK_METHOD1(WasUrlRecentlyNavigatedFromFeed, bool(const GURL&));
 };
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -73,22 +72,30 @@ class HistoryTabHelperTest : public ChromeRenderViewHostTestHarness {
               feed::FeedService::CreateForTesting(&test_feed_api_);
           return result;
         }));
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
     history_service_ = HistoryServiceFactory::GetForProfile(
         profile(), ServiceAccessType::IMPLICIT_ACCESS);
     ASSERT_TRUE(history_service_);
     history_service_->AddPage(
-        page_url_, base::Time::Now(), /*context_id=*/nullptr,
+        page_url_, base::Time::Now(), /*context_id=*/0,
         /*nav_entry_id=*/0,
         /*referrer=*/GURL(), history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
-        history::SOURCE_BROWSED, /*did_replace_entry=*/false,
-        /*floc_allowed=*/true);
+        history::SOURCE_BROWSED, /*did_replace_entry=*/false);
     HistoryTabHelper::CreateForWebContents(web_contents());
+    HistoryTabHelper::FromWebContents(web_contents())
+        ->SetForceEligibleTabForTesting(true);
+  }
+
+  void TearDown() override {
+    // Drop unowned reference before destroying object that owns it.
+    history_service_ = nullptr;
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   TestingProfile::TestingFactories GetTestingFactories() const override {
-    return {{HistoryServiceFactory::GetInstance(),
-             HistoryServiceFactory::GetDefaultFactory()}};
+    return {TestingProfile::TestingFactory{
+        HistoryServiceFactory::GetInstance(),
+        HistoryServiceFactory::GetDefaultFactory()}};
   }
 
   HistoryTabHelper* history_tab_helper() {
@@ -112,6 +119,23 @@ class HistoryTabHelperTest : public ChromeRenderViewHostTestHarness {
         &tracker_);
     loop.Run();
     return title;
+  }
+
+  base::TimeDelta QueryLastVisitDurationFromHistory(const GURL& url) {
+    base::TimeDelta visit_duration;
+    base::RunLoop loop;
+    history_service_->QueryURL(
+        url, /*want_visits=*/true,
+        base::BindLambdaForTesting([&](history::QueryURLResult result) {
+          EXPECT_TRUE(result.success);
+          if (!result.visits.empty()) {
+            visit_duration = result.visits.back().visit_duration;
+          }
+          loop.Quit();
+        }),
+        &tracker_);
+    loop.Run();
+    return visit_duration;
   }
 
   history::MostVisitedURLList QueryMostVisitedURLs() {
@@ -144,8 +168,69 @@ class HistoryTabHelperTest : public ChromeRenderViewHostTestHarness {
   raw_ptr<history::HistoryService> history_service_;
 #if BUILDFLAG(IS_ANDROID)
   TestFeedApi test_feed_api_;
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 };
+
+class HistoryTabHelperVisitedFilteringTest
+    : public HistoryTabHelperTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  HistoryTabHelperVisitedFilteringTest() {
+    bool are_error_navigations_recorded_in_history = GetParam();
+    if (are_error_navigations_recorded_in_history) {
+      scoped_feature_list_.InitAndEnableFeature(
+          blink::features::kVisitedLinksOnErrorNavigation);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          blink::features::kVisitedLinksOnErrorNavigation);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_P(HistoryTabHelperVisitedFilteringTest, ShouldConsiderForNtpMostVisited) {
+  bool are_error_navigations_recorded_in_history = base::FeatureList::IsEnabled(
+      blink::features::kVisitedLinksOnErrorNavigation);
+  NiceMock<content::MockNavigationHandle> navigation_handle(web_contents());
+  const GURL some_url = GURL("https://someurl.com");
+  navigation_handle.set_redirect_chain({some_url});
+
+  // Simulate a user navigating to a forbidden resource.
+  std::string raw_response_headers = "HTTP/1.1 403 Forbidden\r\n\r\n";
+  scoped_refptr<net::HttpResponseHeaders> response_headers =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers);
+  navigation_handle.set_response_headers(response_headers);
+
+  // Create HistoryAddPageArgs for the 403 navigation.
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(some_url, base::Time(), 1,
+                                                     &navigation_handle);
+
+  // We should never be filtering out 403 navigations when determining NTP most
+  // visited. This is because all error navigations other than 404 are eligible.
+  EXPECT_EQ(args.consider_for_ntp_most_visited, true);
+
+  // Simulate a user navigating to a resource that is not found.
+  raw_response_headers = "HTTP/1.1 404 Not Found\r\n\r\n";
+  response_headers =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers);
+  navigation_handle.set_response_headers(response_headers);
+
+  // Create HistoryAddPageArgs for the 404 navigation.
+  args = history_tab_helper()->CreateHistoryAddPageArgs(
+      GURL("https://someurl.com"), base::Time(), 1, &navigation_handle);
+
+  // If 404 error navigations are recorded in history, we should filter them out
+  // when determining NTP most visited.
+  EXPECT_EQ(args.consider_for_ntp_most_visited,
+            !are_error_navigations_recorded_in_history);
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         HistoryTabHelperVisitedFilteringTest,
+                         ::testing::Bool());
 
 TEST_F(HistoryTabHelperTest, ShouldUpdateTitleInHistory) {
   web_contents_tester()->NavigateAndCommit(page_url_);
@@ -177,6 +262,25 @@ TEST_F(HistoryTabHelperTest, ShouldLimitTitleUpdatesPerPage) {
   // Further updates should be ignored.
   web_contents()->UpdateTitleForEntry(entry, u"title11");
   EXPECT_EQ("title10", QueryPageTitleFromHistory(page_url_));
+}
+
+TEST_F(HistoryTabHelperTest, ShouldUpdateVisitDurationInHistory) {
+  const GURL url1("https://url1.com");
+  const GURL url2("https://url2.com");
+
+  web_contents_tester()->NavigateAndCommit(url1);
+  // The duration shouldn't be set yet, since the visit is still open.
+  EXPECT_TRUE(QueryLastVisitDurationFromHistory(url1).is_zero());
+
+  // Once the user navigates on, the duration of the first visit should be
+  // populated.
+  web_contents_tester()->NavigateAndCommit(url2);
+  EXPECT_FALSE(QueryLastVisitDurationFromHistory(url1).is_zero());
+  EXPECT_TRUE(QueryLastVisitDurationFromHistory(url2).is_zero());
+
+  // Closing the tab should finish the second visit and populate its duration.
+  DeleteContents();
+  EXPECT_FALSE(QueryLastVisitDurationFromHistory(url2).is_zero());
 }
 
 TEST_F(HistoryTabHelperTest, CreateAddPageArgsReferringURLMainFrameNoReferrer) {
@@ -289,6 +393,60 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsReferringURLNotMainFrame) {
   EXPECT_NE(args.referrer, GURL("http://previousurl.com"));
 }
 
+TEST_F(HistoryTabHelperTest, CreateAddPageArgsFrameUrlWithValidInitiator) {
+  // Create our initiator RenderFrameHost.
+  content::RenderFrameHostTester* main_rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+  main_rfh_tester->InitializeRenderFrameIfNeeded();
+  content::RenderFrameHost* subframe = main_rfh_tester->AppendChild("subframe");
+  const GURL initiator_url = GURL("http://previousurl.com");
+
+  // Prepare a mock navigation from that initiator frame.
+  const GURL test_url = GURL("http://testurl.com");
+  NiceMock<content::MockNavigationHandle> navigation_handle(test_url, subframe);
+  navigation_handle.set_initiator_origin(url::Origin::Create(initiator_url));
+  // Simulate a navigation that is marked no-referrer (the value of which we
+  // should ignore in favor of initiator origin).
+  auto referrer = blink::mojom::Referrer::New();
+  referrer->url = GURL();
+  referrer->policy = network::mojom::ReferrerPolicy::kNever;
+  navigation_handle.SetReferrer(std::move(referrer));
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(test_url, base::Time(), 1,
+                                                     &navigation_handle);
+
+  // `frame_url` should default to the last committed URL of the initiator
+  // RenderFrameHost.
+  ASSERT_TRUE(args.frame_url.has_value());
+  EXPECT_EQ(args.frame_url.value(), initiator_url);
+}
+
+TEST_F(HistoryTabHelperTest, CreateAddPageArgsFrameUrlWithInvalidInitiator) {
+  // Create our initiator RenderFrameHost but do not set the initiator origin.
+  // This simulates an invalid or missing initiator frame.
+  content::RenderFrameHostTester* main_rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+  main_rfh_tester->InitializeRenderFrameIfNeeded();
+  content::RenderFrameHost* subframe = main_rfh_tester->AppendChild("subframe");
+
+  // Prepare a mock navigation from that initiator frame.
+  const GURL test_url = GURL("http://testurl.com");
+  NiceMock<content::MockNavigationHandle> navigation_handle(test_url, subframe);
+  // Set a valid referrer with a default referrer policy.
+  auto referrer = blink::mojom::Referrer::New();
+  referrer->url = test_url;
+  referrer->policy = network::mojom::ReferrerPolicy::kDefault;
+  navigation_handle.SetReferrer(std::move(referrer));
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(test_url, base::Time(), 1,
+                                                     &navigation_handle);
+
+  // `frame_url` should fall back on referrer when we have an invalid initiator
+  // origin.
+  ASSERT_TRUE(args.frame_url.has_value());
+  EXPECT_EQ(args.frame_url.value(), test_url);
+}
+
 TEST_F(HistoryTabHelperTest, CreateAddPageArgsHasOpenerWebContentsFirstPage) {
   std::unique_ptr<content::WebContents> opener_web_contents =
       CreateTestWebContents();
@@ -316,6 +474,58 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsHasOpenerWebContentsFirstPage) {
 
   ASSERT_TRUE(args.opener.has_value());
   EXPECT_EQ(args.opener->url, GURL("https://opensnewtab.com/"));
+
+  // When previous primary main frame is empty and our navigation type is LINK,
+  // the top_level_url should be replaced by a valid opener URL.
+  ASSERT_TRUE(args.top_level_url.has_value());
+  EXPECT_EQ(args.top_level_url.value(), args.opener->url);
+}
+
+TEST_F(HistoryTabHelperTest, CreateAddPageArgsHasLiveOriginalOpenerChain) {
+  // Prepare the original opener WebContents that will serve as the root of the
+  // live original opener chain.
+  std::unique_ptr<content::WebContents> live_original_opener =
+      CreateTestWebContents();
+  content::WebContentsTester* live_original_tester =
+      content::WebContentsTester::For(live_original_opener.get());
+  live_original_tester->NavigateAndCommit(GURL("https://opensnewtab.com/"));
+
+  // The web_contents() for this test will have an empty opener property
+  // but a valid live original opener chain. This mimics behavior such as
+  // clicking on a link which opens in a new tab.
+  content::WebContentsTester::For(web_contents())
+      ->SetOriginalOpener(live_original_opener.get());
+
+  // We want to create a HistoryTabHelper for the WebContents with an empty
+  // opener, so the `top_level_url` is forced to be constructed with the live
+  // original opener chain instead.
+  HistoryTabHelper::CreateForWebContents(web_contents());
+  HistoryTabHelper::FromWebContents(web_contents())
+      ->DidOpenRequestedURL(web_contents(), nullptr,
+                            GURL("http://someurl.com/"), content::Referrer(),
+                            WindowOpenDisposition::NEW_WINDOW,
+                            ui::PAGE_TRANSITION_LINK, false, true);
+
+  // Preparing the NavigationHandle that HistoryTabHelper will use to construct
+  // the HistoryAddPageArgs.
+  content::RenderFrameHostTester* main_rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+  main_rfh_tester->InitializeRenderFrameIfNeeded();
+  content::RenderFrameHost* subframe = main_rfh_tester->AppendChild("subframe");
+  NiceMock<content::MockNavigationHandle> navigation_handle(
+      GURL("http://someurl.com"), subframe);
+  navigation_handle.set_redirect_chain({GURL("http://someurl.com")});
+
+  // Construct the HistoryAddPageArgs taking into consideration the WebContents
+  // environment and NavigationHandle.
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(
+          GURL("http://someurl.com"), base::Time(), 1, &navigation_handle);
+
+  // When previous primary main frame and opener URLs are invalid, the
+  // `top_level_url` should be populated with the live original opener URL.
+  ASSERT_TRUE(args.top_level_url.has_value());
+  EXPECT_EQ(args.top_level_url.value(), GURL("https://opensnewtab.com/"));
 }
 
 TEST_F(HistoryTabHelperTest, CreateAddPageArgsSameDocNavigationUsesOpener) {
@@ -338,7 +548,7 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsSameDocNavigationUsesOpener) {
 }
 
 TEST_F(HistoryTabHelperTest,
-       CreateAddPageArgsHasOpenerWebContentseNotFirstPage) {
+       CreateAddPageArgsHasOpenerWebContentsNotFirstPage) {
   std::unique_ptr<content::WebContents> opener_web_contents =
       CreateTestWebContents();
   content::WebContentsTester* opener_web_contents_tester =
@@ -367,9 +577,57 @@ TEST_F(HistoryTabHelperTest,
           GURL("http://someurl.com"), base::Time(), 1, &navigation_handle);
 
   EXPECT_FALSE(args.opener.has_value());
+
+  // When there is a valid previous primary main frame, top-level url should
+  // not be overwritten by an opener or live opener chain URL.
+  ASSERT_TRUE(args.top_level_url.has_value());
+  ASSERT_EQ(args.top_level_url.value(), GURL("http://someurl.com"));
+}
+
+TEST_F(HistoryTabHelperTest,
+       CreateAddPageArgsPopulatesOnVisitContextAnnotations) {
+  NiceMock<content::MockNavigationHandle> navigation_handle(web_contents());
+  navigation_handle.set_redirect_chain({GURL("https://someurl.com")});
+
+  std::string raw_response_headers = "HTTP/1.1 234 OK\r\n\r\n";
+  scoped_refptr<net::HttpResponseHeaders> response_headers =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers);
+  DCHECK(response_headers);
+  navigation_handle.set_response_headers(response_headers);
+
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(
+          GURL("https://someurl.com"), base::Time(), 1, &navigation_handle);
+
+  // Make sure the `context_annotations` are populated.
+  ASSERT_TRUE(args.context_annotations.has_value());
+  // Most of the actual fields can't be verified here, because the corresponding
+  // data sources don't exist in this unit test (e.g. there's no Browser, no
+  // other TabHelpers, etc). At least check the response code that was set up
+  // above.
+  EXPECT_EQ(args.context_annotations->response_code, 234);
 }
 
 #if BUILDFLAG(IS_ANDROID)
+TEST_F(HistoryTabHelperTest, CreateAddPageArgsPopulatesAppId) {
+  NiceMock<content::MockNavigationHandle> navigation_handle(web_contents());
+  navigation_handle.set_redirect_chain({GURL("https://someurl.com")});
+
+  std::string raw_response_headers = "HTTP/1.1 234 OK\r\n\r\n";
+  scoped_refptr<net::HttpResponseHeaders> response_headers =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers);
+  DCHECK(response_headers);
+  navigation_handle.set_response_headers(response_headers);
+
+  history_tab_helper()->SetAppId("org.chromium.testapp");
+
+  history::HistoryAddPageArgs args =
+      history_tab_helper()->CreateHistoryAddPageArgs(
+          GURL("https://someurl.com"), base::Time(), 1, &navigation_handle);
+
+  // Make sure the `app_id` is populated.
+  ASSERT_EQ(*args.app_id, "org.chromium.testapp");
+}
 
 TEST_F(HistoryTabHelperTest, NonFeedNavigationsDoContributeToMostVisited) {
   GURL new_url("http://newurl.com");
@@ -392,7 +650,7 @@ TEST_F(HistoryTabHelperTest, FeedNavigationsDoNotContributeToMostVisited) {
   EXPECT_THAT(GetMostVisitedURLSet(), testing::Not(testing::Contains(new_url)));
 }
 
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
 enum class MPArchType {
   kFencedFrame,
@@ -410,11 +668,10 @@ class HistoryTabHelperMPArchTest
             {{"implementation_type", "mparch"}});
         break;
       case MPArchType::kPrerender:
-        scoped_feature_list_.InitWithFeatures(
-            {blink::features::kPrerender2},
+        scoped_feature_list_.InitAndDisableFeature(
             // Disable the memory requirement of Prerender2 so the test can run
             // on any bot.
-            {blink::features::kPrerender2MemoryControls});
+            blink::features::kPrerender2MemoryControls);
         break;
     }
   }

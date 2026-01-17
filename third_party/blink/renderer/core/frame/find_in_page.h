@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_FIND_IN_PAGE_H_
 
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -20,11 +19,13 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 
 namespace blink {
 
 class WebLocalFrameImpl;
-class WebString;
 
 class CORE_EXPORT FindInPage final : public GarbageCollected<FindInPage>,
                                      public mojom::blink::FindInPage {
@@ -34,13 +35,16 @@ class CORE_EXPORT FindInPage final : public GarbageCollected<FindInPage>,
   FindInPage& operator=(const FindInPage&) = delete;
 
   bool FindInternal(int identifier,
-                    const WebString& search_text,
+                    const String& search_text,
                     const mojom::blink::FindOptions&,
                     bool wrap_within_frame,
                     bool* active_now = nullptr);
 
+  // Overrides the tickmarks from the client. Note that these values are in
+  // layout space, which means they differ by device scale factor from the
+  // CSS space.
   void SetTickmarks(const WebElement& target,
-                    const WebVector<gfx::Rect>& tickmarks);
+                    const std::vector<gfx::Rect>& tickmarks_in_layout_space);
 
   int FindMatchMarkersVersion() const;
 
@@ -95,6 +99,8 @@ class CORE_EXPORT FindInPage final : public GarbageCollected<FindInPage>,
   void Trace(Visitor* visitor) const {
     visitor->Trace(text_finder_);
     visitor->Trace(frame_);
+    visitor->Trace(client_);
+    visitor->Trace(receiver_);
   }
 
  private:
@@ -105,9 +111,10 @@ class CORE_EXPORT FindInPage final : public GarbageCollected<FindInPage>,
 
   const Member<WebLocalFrameImpl> frame_;
 
-  mojo::Remote<mojom::blink::FindInPageClient> client_;
+  HeapMojoRemote<mojom::blink::FindInPageClient> client_{nullptr};
 
-  mojo::AssociatedReceiver<mojom::blink::FindInPage> receiver_{this};
+  HeapMojoAssociatedReceiver<mojom::blink::FindInPage, FindInPage> receiver_{
+      this, nullptr};
 };
 
 }  // namespace blink

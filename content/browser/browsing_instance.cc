@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,11 @@
 
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/origin_agent_cluster_isolation_state.h"
 #include "content/browser/site_info.h"
+#include "content/browser/site_instance_group.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_or_resource_context.h"
@@ -26,15 +29,25 @@ int BrowsingInstance::next_browsing_instance_id_ = 1;
 BrowsingInstance::BrowsingInstance(
     BrowserContext* browser_context,
     const WebExposedIsolationInfo& web_exposed_isolation_info,
-    bool is_guest)
+    bool is_guest,
+    bool is_fenced,
+    bool is_fixed_storage_partition)
     : isolation_context_(
           BrowsingInstanceId::FromUnsafeValue(next_browsing_instance_id_++),
           BrowserOrResourceContext(browser_context),
-          is_guest),
+          is_guest,
+          is_fenced,
+          OriginAgentClusterIsolationState::CreateForDefaultIsolation(
+              browser_context)),
       active_contents_count_(0u),
       default_site_instance_(nullptr),
-      web_exposed_isolation_info_(web_exposed_isolation_info) {
+      default_site_instance_group_(nullptr),
+      web_exposed_isolation_info_(web_exposed_isolation_info),
+      is_fixed_storage_partition_(is_fixed_storage_partition) {
   DCHECK(browser_context);
+  if (is_guest) {
+    CHECK(is_fixed_storage_partition);
+  }
 }
 
 BrowserContext* BrowsingInstance::GetBrowserContext() const {
@@ -42,17 +55,26 @@ BrowserContext* BrowsingInstance::GetBrowserContext() const {
 }
 
 bool BrowsingInstance::HasSiteInstance(const SiteInfo& site_info) {
-  return site_instance_map_.find(site_info) != site_instance_map_.end();
+  return base::Contains(site_instance_map_, site_info);
 }
 
 scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURL(
     const UrlInfo& url_info,
     bool allow_default_instance) {
+  return GetSiteInstanceForURL(url_info, /*creation_group=*/nullptr,
+                               allow_default_instance);
+}
+
+scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURL(
+    const UrlInfo& url_info,
+    SiteInstanceGroup* creation_group,
+    bool allow_default_instance) {
   scoped_refptr<SiteInstanceImpl> site_instance =
       GetSiteInstanceForURLHelper(url_info, allow_default_instance);
 
-  if (site_instance)
+  if (site_instance) {
     return site_instance;
+  }
 
   // No current SiteInstance for this site, so let's create one.
   scoped_refptr<SiteInstanceImpl> instance = new SiteInstanceImpl(this);
@@ -61,9 +83,17 @@ scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURL(
   // Some URLs should leave the SiteInstance's site unassigned, though if
   // `instance` is for a guest, we should always set the site to ensure that it
   // carries guest information contained within SiteInfo.
-  if (SiteInstance::ShouldAssignSiteForURL(url_info.url) ||
-      isolation_context_.is_guest())
+  if (SiteInstanceImpl::ShouldAssignSiteForUrlInfo(url_info) ||
+      isolation_context_.is_guest()) {
     instance->SetSite(url_info);
+  }
+
+  // Add the new SiteInstance to `group`, if it exists.
+  if (creation_group) {
+    creation_group->AddSiteInstance(instance.get());
+    instance->SetSiteInstanceGroup(creation_group);
+  }
+
   return instance;
 }
 
@@ -72,8 +102,9 @@ SiteInfo BrowsingInstance::GetSiteInfoForURL(const UrlInfo& url_info,
   scoped_refptr<SiteInstanceImpl> site_instance =
       GetSiteInstanceForURLHelper(url_info, allow_default_instance);
 
-  if (site_instance)
+  if (site_instance) {
     return site_instance->GetSiteInfo();
+  }
 
   return ComputeSiteInfoForURL(url_info);
 }
@@ -81,11 +112,22 @@ SiteInfo BrowsingInstance::GetSiteInfoForURL(const UrlInfo& url_info,
 scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForSiteInfo(
     const SiteInfo& site_info) {
   auto i = site_instance_map_.find(site_info);
-  if (i != site_instance_map_.end())
-    return i->second;
+  if (i != site_instance_map_.end()) {
+    return i->second.get();
+  }
 
   scoped_refptr<SiteInstanceImpl> instance = new SiteInstanceImpl(this);
   instance->SetSite(site_info);
+  return instance;
+}
+
+scoped_refptr<SiteInstanceImpl>
+BrowsingInstance::GetMaybeGroupRelatedSiteInstanceForURL(
+    const UrlInfo& url_info,
+    SiteInstanceGroup* creation_group) {
+  CHECK(creation_group);
+  scoped_refptr<SiteInstanceImpl> instance = GetSiteInstanceForURL(
+      url_info, creation_group, /*allow_default_instance=*/false);
   return instance;
 }
 
@@ -94,13 +136,14 @@ scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURLHelper(
     bool allow_default_instance) {
   const SiteInfo site_info = ComputeSiteInfoForURL(url_info);
   auto i = site_instance_map_.find(site_info);
-  if (i != site_instance_map_.end())
-    return i->second;
+  if (i != site_instance_map_.end()) {
+    return i->second.get();
+  }
 
   // Check to see if we can use the default SiteInstance for sites that don't
   // need to be isolated in their own process.
-  if (allow_default_instance &&
-      SiteInstanceImpl::CanBePlacedInDefaultSiteInstance(
+  if (!ShouldUseDefaultSiteInstanceGroup() && allow_default_instance &&
+      SiteInstanceImpl::CanBePlacedInDefaultSiteInstanceOrGroup(
           isolation_context_, url_info.url, site_info)) {
     scoped_refptr<SiteInstanceImpl> site_instance =
         default_site_instance_.get();
@@ -144,6 +187,7 @@ void BrowsingInstance::RegisterSiteInstance(SiteInstanceImpl* site_instance) {
   // Explicitly prevent the default SiteInstance from being added since
   // the map is only supposed to contain instances that map to a single site.
   if (site_instance->IsDefaultSiteInstance()) {
+    DCHECK(!ShouldUseDefaultSiteInstanceGroup());
     CHECK(!default_site_instance_);
     default_site_instance_ = site_instance;
     return;
@@ -193,11 +237,12 @@ BrowsingInstance::~BrowsingInstance() {
   DCHECK(site_instance_map_.empty());
   DCHECK_EQ(0u, active_contents_count_);
   DCHECK(!default_site_instance_);
+  DCHECK(!default_site_instance_group_);
 
   // Remove any origin isolation opt-ins related to this instance.
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->RemoveOptInIsolatedOriginsForBrowsingInstance(
+  policy->RemoveAllStateForBrowsingInstance(
       isolation_context_.browsing_instance_id());
 }
 
@@ -264,8 +309,9 @@ int BrowsingInstance::EstimateOriginAgentClusterOverhead() {
   for (auto& entry : site_instance_map_) {
     const SiteInfo& site_info = entry.first;
     GURL process_lock_url = site_info.process_lock_url();
-    if (!process_lock_url.SchemeIs(url::kHttpsScheme))
+    if (!process_lock_url.SchemeIs(url::kHttpsScheme)) {
       continue;
+    }
 
     site_info_set.insert(site_info);
     site_info_set_no_oac.insert(
@@ -274,6 +320,15 @@ int BrowsingInstance::EstimateOriginAgentClusterOverhead() {
   DCHECK_GE(site_info_set.size(), site_info_set_no_oac.size());
   int result = site_info_set.size() - site_info_set_no_oac.size();
   return result;
+}
+
+void BrowsingInstance::IncrementActiveContentsCount() {
+  active_contents_count_++;
+}
+
+void BrowsingInstance::DecrementActiveContentsCount() {
+  DCHECK_LT(0u, active_contents_count_);
+  active_contents_count_--;
 }
 
 }  // namespace content

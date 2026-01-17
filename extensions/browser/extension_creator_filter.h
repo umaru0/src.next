@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ class ExtensionCreatorFilter : public base::RefCounted<ExtensionCreatorFilter> {
   ExtensionCreatorFilter(const ExtensionCreatorFilter&) = delete;
   ExtensionCreatorFilter& operator=(const ExtensionCreatorFilter&) = delete;
 
-  // Returns true if the given |file_path| should be included in a packed
+  // Returns true if the given `file_path` should be included in a packed
   // extension.
   bool ShouldPackageFile(const base::FilePath& file_path);
 

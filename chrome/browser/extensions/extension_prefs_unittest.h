@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_PREFS_UNITTEST_H_
 
 #include <stddef.h>
+
+#include <array>
 
 #include "chrome/browser/extensions/test_extension_prefs.h"
 #include "content/public/test/browser_task_environment.h"
@@ -73,7 +75,7 @@ class PrefsPrepopulatedTestBase : public ExtensionPrefsTest {
   Extension* internal_extension() { return internal_extension_.get(); }
 
  protected:
-  bool installed_[kNumInstalledExtensions];
+  std::array<bool, kNumInstalledExtensions> installed_ = {};
 
   // The following extensions all have mojom::ManifestLocation set to
   // mojom::ManifestLocation::kExternalPref.

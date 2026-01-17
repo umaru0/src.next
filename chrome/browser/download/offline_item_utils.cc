@@ -1,15 +1,14 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/download/offline_item_utils.h"
 
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/download/public/common/auto_resumption_handler.h"
-#include "components/download/public/common/download_schedule.h"
 #include "components/download/public/common/download_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
@@ -21,11 +20,9 @@
 #endif
 
 using DownloadItem = download::DownloadItem;
-using DownloadSchedule = download::DownloadSchedule;
 using ContentId = offline_items_collection::ContentId;
 using OfflineItem = offline_items_collection::OfflineItem;
 using OfflineItemFilter = offline_items_collection::OfflineItemFilter;
-using OfflineItemSchedule = offline_items_collection::OfflineItemSchedule;
 using OfflineItemState = offline_items_collection::OfflineItemState;
 using OfflineItemProgressUnit =
     offline_items_collection::OfflineItemProgressUnit;
@@ -46,12 +43,12 @@ const char kDownloadNamespacePrefix[] = "LEGACY_DOWNLOAD";
 // The remaining time for a download item if it cannot be calculated.
 constexpr int64_t kUnknownRemainingTime = -1;
 
-absl::optional<OfflineItemFilter> FilterForSpecialMimeTypes(
+std::optional<OfflineItemFilter> FilterForSpecialMimeTypes(
     const std::string& mime_type) {
   if (base::EqualsCaseInsensitiveASCII(mime_type, "application/ogg"))
     return OfflineItemFilter::FILTER_AUDIO;
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 OfflineItemFilter MimeTypeToOfflineItemFilter(const std::string& mime_type) {
@@ -83,7 +80,7 @@ bool IsInterruptedDownloadAutoResumable(download::DownloadItem* item) {
   auto_resumption_size_limit = DownloadUtils::GetAutoResumptionSizeLimit();
 #endif
 
-  return download::AutoResumptionHandler::IsInterruptedDownloadAutoResumable(
+  return download::IsInterruptedDownloadAutoResumable(
       item, auto_resumption_size_limit);
 }
 
@@ -113,6 +110,7 @@ OfflineItem OfflineItemUtils::CreateOfflineItem(const std::string& name_space,
   item.is_openable = download_item->CanOpenDownload();
   item.file_path = download_item->GetTargetFilePath();
   item.mime_type = download_item->GetMimeType();
+  item.danger_type = download_item->GetDangerType();
 #if BUILDFLAG(IS_ANDROID)
   item.mime_type = DownloadUtils::RemapGenericMimeType(
       item.mime_type, download_item->GetOriginalUrl(),
@@ -126,6 +124,8 @@ OfflineItem OfflineItemUtils::CreateOfflineItem(const std::string& name_space,
   item.url = download_item->GetURL();
   item.original_url = download_item->GetOriginalUrl();
   item.is_off_the_record = off_the_record;
+  item.referrer_url = download_item->GetReferrerUrl();
+  item.has_user_gesture = download_item->HasUserGesture();
 
   item.is_resumable = download_item->CanResume();
   item.allow_metered = download_item->AllowMetered();
@@ -139,7 +139,6 @@ OfflineItem OfflineItemUtils::CreateOfflineItem(const std::string& name_space,
   item.fail_state =
       ConvertDownloadInterruptReasonToFailState(download_item->GetLastReason());
   item.can_rename = download_item->GetState() == DownloadItem::COMPLETE;
-  item.schedule = ToOfflineItemSchedule(download_item->GetDownloadSchedule());
 
   switch (download_item->GetState()) {
     case DownloadItem::IN_PROGRESS:
@@ -175,7 +174,7 @@ OfflineItem OfflineItemUtils::CreateOfflineItem(const std::string& name_space,
       NOTREACHED();
   }
 
-  // TODO(crbug.com/857549): Set pending_state correctly.
+  // TODO(crbug.com/40582846): Set pending_state correctly.
   item.pending_state = item.state == OfflineItemState::PENDING
                            ? PendingState::PENDING_NETWORK
                            : PendingState::NOT_PENDING;
@@ -321,7 +320,9 @@ std::u16string OfflineItemUtils::GetFailStateMessage(FailState fail_state) {
       break;
 
     case FailState::NO_FAILURE:
-      NOTREACHED();
+      // We reach here if the received bytes is zero. Ideally, we should have a
+      // separate FailState outside of download interrupt reasons, and pass the
+      // bytes info to every function that invokes this.
       [[fallthrough]];
     case FailState::CANNOT_DOWNLOAD:
       [[fallthrough]];
@@ -357,24 +358,4 @@ RenameResult OfflineItemUtils::ConvertDownloadRenameResultToRenameResult(
     case DownloadRenameResult::FAILURE_UNKNOWN:
       return RenameResult::FAILURE_UNKNOWN;
   }
-}
-
-// static
-absl::optional<DownloadSchedule> OfflineItemUtils::ToDownloadSchedule(
-    absl::optional<OfflineItemSchedule> offline_item_schedule) {
-  if (!offline_item_schedule)
-    return absl::nullopt;
-
-  return absl::make_optional<DownloadSchedule>(
-      offline_item_schedule->only_on_wifi, offline_item_schedule->start_time);
-}
-
-// static
-absl::optional<OfflineItemSchedule> OfflineItemUtils::ToOfflineItemSchedule(
-    absl::optional<DownloadSchedule> download_schedule) {
-  if (!download_schedule)
-    return absl::nullopt;
-
-  return absl::make_optional<OfflineItemSchedule>(
-      download_schedule->only_on_wifi(), download_schedule->start_time());
 }

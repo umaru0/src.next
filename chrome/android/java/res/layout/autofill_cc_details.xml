@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2020 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2020 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -24,7 +26,7 @@
 
     <ImageView
         android:id="@+id/message_divider"
-        android:background="@macro/divider_line_bg_color"
+        android:background="@drawable/divider_line_bg"
         android:importantForAccessibility="no"
         android:layout_height="16dp"
         android:layout_width="1dp"

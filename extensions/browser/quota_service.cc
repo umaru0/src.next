@@ -1,12 +1,13 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "extensions/browser/quota_service.h"
 
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/error_utils.h"
+#include "extensions/common/extension_id.h"
 
 namespace {
 
@@ -24,7 +25,8 @@ bool g_purge_disabled_for_testing = false;
 namespace extensions {
 
 QuotaService::QuotaService() {
-  if (!g_purge_disabled_for_testing && base::ThreadTaskRunnerHandle::IsSet()) {
+  if (!g_purge_disabled_for_testing &&
+      base::SingleThreadTaskRunner::HasCurrentDefault()) {
     purge_timer_.Start(FROM_HERE, base::Days(kPurgeIntervalInDays), this,
                        &QuotaService::Purge);
   }
@@ -36,27 +38,30 @@ QuotaService::~QuotaService() {
   Purge();
 }
 
-std::string QuotaService::Assess(const std::string& extension_id,
+std::string QuotaService::Assess(const ExtensionId& extension_id,
                                  ExtensionFunction* function,
                                  const base::Value::List& args,
                                  const base::TimeTicks& event_time) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (function->ShouldSkipQuotaLimiting())
+  if (function->ShouldSkipQuotaLimiting()) {
     return std::string();
+  }
 
   // Lookup function list for extension.
   FunctionHeuristicsMap& functions = function_heuristics_[extension_id];
 
   // Lookup heuristics for function, create if necessary.
   QuotaLimitHeuristics& heuristics = functions[function->name()];
-  if (heuristics.empty())
+  if (heuristics.empty()) {
     function->GetQuotaLimitHeuristics(&heuristics);
+  }
 
-  if (heuristics.empty())
+  if (heuristics.empty()) {
     return std::string();  // No heuristic implies no limit.
+  }
 
-  QuotaLimitHeuristic* failed_heuristic = NULL;
+  QuotaLimitHeuristic* failed_heuristic = nullptr;
   for (const auto& heuristic : heuristics) {
     // Apply heuristic to each item (bucket).
     if (!heuristic->ApplyToArgs(args, event_time)) {
@@ -65,8 +70,9 @@ std::string QuotaService::Assess(const std::string& extension_id,
     }
   }
 
-  if (!failed_heuristic)
+  if (!failed_heuristic) {
     return std::string();
+  }
 
   std::string error = failed_heuristic->GetError();
   DCHECK_GT(error.length(), 0u);
@@ -108,7 +114,7 @@ QuotaLimitHeuristic::QuotaLimitHeuristic(const Config& config,
                                          const std::string& name)
     : config_(config), bucket_mapper_(std::move(map)), name_(name) {}
 
-QuotaLimitHeuristic::~QuotaLimitHeuristic() {}
+QuotaLimitHeuristic::~QuotaLimitHeuristic() = default;
 
 bool QuotaLimitHeuristic::ApplyToArgs(const base::Value::List& args,
                                       const base::TimeTicks& event_time) {
@@ -117,8 +123,9 @@ bool QuotaLimitHeuristic::ApplyToArgs(const base::Value::List& args,
   for (auto i = buckets.begin(); i != buckets.end(); ++i) {
     if ((*i)->expiration().is_null())  // A brand new bucket.
       (*i)->Reset(config_, event_time);
-    if (!Apply(*i, event_time))
+    if (!Apply(*i, event_time)) {
       return false;  // It only takes one to spoil it for everyone.
+    }
   }
   return true;
 }
@@ -129,8 +136,9 @@ std::string QuotaLimitHeuristic::GetError() const {
 
 bool QuotaService::TimedLimit::Apply(Bucket* bucket,
                                      const base::TimeTicks& event_time) {
-  if (event_time > bucket->expiration())
+  if (event_time > bucket->expiration()) {
     bucket->Reset(config(), event_time);
+  }
 
   return bucket->DeductToken();
 }

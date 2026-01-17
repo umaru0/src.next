@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,7 @@
 class InterceptOMADownloadNavigationThrottle
     : public content::NavigationThrottle {
  public:
-  static std::unique_ptr<content::NavigationThrottle> Create(
-      content::NavigationHandle* handle);
+  static void CreateAndAdd(content::NavigationThrottleRegistry& registry);
 
   InterceptOMADownloadNavigationThrottle(
       const InterceptOMADownloadNavigationThrottle&) = delete;
@@ -29,7 +28,7 @@ class InterceptOMADownloadNavigationThrottle
 
  private:
   explicit InterceptOMADownloadNavigationThrottle(
-      content::NavigationHandle* handle);
+      content::NavigationThrottleRegistry& registry);
 
   // Helper method to intercept the download.
   void InterceptDownload();

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,19 +13,23 @@
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_features.h"
+#include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
-#include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
+#include "chrome/browser/extensions/api/developer_private/developer_private_functions.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -36,13 +40,15 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
-#include "components/nacl/common/buildflags.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_host_test_helper.h"
 #include "extensions/browser/extension_registry.h"
@@ -119,7 +125,7 @@ class LazyBackgroundPageApiTest : public ExtensionApiTest {
   LazyBackgroundPageApiTest& operator=(const LazyBackgroundPageApiTest&) =
       delete;
 
-  ~LazyBackgroundPageApiTest() override {}
+  ~LazyBackgroundPageApiTest() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
@@ -167,14 +173,18 @@ class LazyBackgroundPageApiTest : public ExtensionApiTest {
       scoped_refptr<const Extension> extension) {
     auto dev_tools_function =
         base::MakeRefCounted<api::DeveloperPrivateOpenDevToolsFunction>();
-    extension_function_test_utils::RunFunction(dev_tools_function.get(),
-                                               base::StringPrintf(
-                                                   R"([{"renderViewId": -1,
+    api_test_utils::RunFunction(dev_tools_function.get(),
+                                base::StringPrintf(
+                                    R"([{"renderViewId": -1,
                                                         "renderProcessId": -1,
                                                         "extensionId": "%s"}])",
-                                                   extension->id().c_str()),
-                                               browser(), api_test_utils::NONE);
+                                    extension->id().c_str()),
+                                browser()->profile(),
+                                api_test_utils::FunctionMode::kNone);
   }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BrowserActionCreateTab) {
@@ -233,7 +243,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BroadcastEvent) {
 
   // Lazy Background Page doesn't exist yet.
   EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
-  EXPECT_EQ(0u, extension_action_test_util::GetVisiblePageActionCount(
+  EXPECT_EQ(0u, extension_action_test_util::GetActivePageActionCount(
                     browser()->tab_strip_model()->GetActiveWebContents()));
 
   // Open a tab to a URL that will trigger the page action to show.
@@ -249,7 +259,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BroadcastEvent) {
 
   // Page action is shown.
   WaitForPageActionVisibilityChangeTo(1);
-  EXPECT_EQ(1u, extension_action_test_util::GetVisiblePageActionCount(
+  EXPECT_EQ(1u, extension_action_test_util::GetActivePageActionCount(
                     browser()->tab_strip_model()->GetActiveWebContents()));
 }
 
@@ -334,7 +344,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
   DevToolsWindowCreationObserver devtools_observer;
   // base::Unretained is safe because of
   // DevToolsWindowCreationObserver::WaitForLoad()
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &LazyBackgroundPageApiTest::OpenDevToolsWindowForAnInactiveEventPage,
@@ -344,20 +354,31 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
   // Verify that dev tools opened.
   content::DevToolsAgentHost::List targets =
       content::DevToolsAgentHost::GetOrCreateAll();
-  scoped_refptr<content::DevToolsAgentHost> service_worker_host;
+  scoped_refptr<content::DevToolsAgentHost> background_host;
   for (const scoped_refptr<content::DevToolsAgentHost>& host : targets) {
-    if (host->GetURL() == BackgroundInfo::GetBackgroundURL(extension.get())) {
-      EXPECT_FALSE(service_worker_host);
-      service_worker_host = host;
+    if (host->GetURL() != BackgroundInfo::GetBackgroundURL(extension.get())) {
+      continue;
+    }
+    // There isn't really a tab corresponding to the extension background page,
+    // but this is how DevTools refers to a top-level web contents.
+    if (host->GetType() == content::DevToolsAgentHost::kTypeTab) {
+      EXPECT_FALSE(background_host);
+      background_host = host;
     }
   }
-  ASSERT_TRUE(service_worker_host);
-  EXPECT_TRUE(DevToolsWindow::FindDevToolsWindow(service_worker_host.get()));
+  ASSERT_TRUE(background_host);
+  EXPECT_TRUE(DevToolsWindow::FindDevToolsWindow(background_host.get()));
 }
 
 // Tests that the lazy background page stays alive until all visible views are
 // closed.
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForView) {
+// TODO: crbug.com/379109454 - Fix flakiness of the test.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#define MAYBE_WaitForView DISABLED_WaitForView
+#else
+#define MAYBE_WaitForView WaitForView
+#endif
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, MAYBE_WaitForView) {
   ExtensionHostTestHelper host_helper(profile());
   host_helper.RestrictToType(mojom::ViewType::kExtensionBackgroundPage);
   ResultCatcher catcher;
@@ -380,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForView) {
 
   // Close the new tab.
   browser()->tab_strip_model()->CloseWebContentsAt(
-      browser()->tab_strip_model()->active_index(), TabStripModel::CLOSE_NONE);
+      browser()->tab_strip_model()->active_index(), TabCloseTypes::CLOSE_NONE);
   host_helper.WaitForHostDestroyed();
 
   // Lazy Background Page has been shut down.
@@ -410,99 +431,18 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_WaitForRequest) {
   host_helper.RestrictToType(mojom::ViewType::kExtensionBackgroundPage);
 
   // Abort the request.
-  bool result = false;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(host->web_contents(),
-                                                   "abortRequest()", &result));
-  EXPECT_TRUE(result);
+  EXPECT_EQ(true, content::EvalJs(host->web_contents(), "abortRequest()"));
   host_helper.WaitForHostDestroyed();
 
   // Lazy Background Page has been shut down.
   EXPECT_FALSE(pm->GetBackgroundHostForExtension(last_loaded_extension_id()));
 }
 
-// Tests that the lazy background page stays alive while a NaCl module exists in
-// its DOM.
-#if BUILDFLAG(ENABLE_NACL)
-
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInBackgroundPage) {
-  {
-    base::FilePath extdir;
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::PathService::Get(chrome::DIR_GEN_TEST_DATA, &extdir));
-    extdir = extdir.AppendASCII("ppapi/tests/extensions/load_unload/newlib");
-    ExtensionHostTestHelper host_helper(profile());
-    host_helper.RestrictToType(mojom::ViewType::kExtensionBackgroundPage);
-    ASSERT_TRUE(LoadExtension(extdir));
-    // Wait for the background page to cycle.
-    host_helper.WaitForDocumentElementAvailable();
-    host_helper.WaitForHostDestroyed();
-  }
-
-  // The NaCl module is loaded, and the Lazy Background Page stays alive.
-  {
-    ExtensionTestMessageListener nacl_module_loaded("nacl_module_loaded");
-    ExtensionActionTestHelper::Create(browser())->Press(
-        last_loaded_extension_id());
-    EXPECT_TRUE(nacl_module_loaded.WaitUntilSatisfied());
-    content::RunAllTasksUntilIdle();
-    EXPECT_TRUE(IsBackgroundPageAlive(last_loaded_extension_id()));
-  }
-
-  // The NaCl module is detached from DOM, and the Lazy Background Page shuts
-  // down.
-  {
-    ExtensionHostTestHelper host_helper(profile());
-    host_helper.RestrictToType(mojom::ViewType::kExtensionBackgroundPage);
-    ExtensionActionTestHelper::Create(browser())->Press(
-        last_loaded_extension_id());
-    host_helper.WaitForHostDestroyed();
-  }
-
-  // The Lazy Background Page has been shut down.
-  EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
-}
-
-// Tests that the lazy background page shuts down when all visible views with
-// NaCl modules are closed.
-IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInView) {
-  // The extension is loaded and should've opened a new tab to an extension
-  // page, and the Lazy Background Page stays alive.
-  {
-    base::FilePath extdir;
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::PathService::Get(chrome::DIR_GEN_TEST_DATA, &extdir));
-    extdir = extdir.AppendASCII("ppapi/tests/extensions/popup/newlib");
-    ResultCatcher catcher;
-    const Extension* extension = LoadExtension(extdir);
-    ASSERT_TRUE(extension);
-    EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
-    EXPECT_EQ(extension->GetResourceURL("popup.html"),
-              browser()
-                  ->tab_strip_model()
-                  ->GetActiveWebContents()
-                  ->GetLastCommittedURL());
-    EXPECT_TRUE(IsBackgroundPageAlive(last_loaded_extension_id()));
-  }
-
-  // Close the new tab.
-  {
-    ExtensionHostTestHelper host_helper(profile(), last_loaded_extension_id());
-    host_helper.RestrictToType(mojom::ViewType::kExtensionBackgroundPage);
-    browser()->tab_strip_model()->CloseWebContentsAt(
-        browser()->tab_strip_model()->active_index(),
-        TabStripModel::CLOSE_NONE);
-    host_helper.WaitForHostDestroyed();
-  }
-
-  // The Lazy Background Page has been shut down.
-  EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
-}
-#endif
-
 // Tests that the lazy background page stays alive until all visible views are
 // closed.
 // http://crbug.com/175778; test fails frequently on OS X
-#if BUILDFLAG(IS_MAC)
+// TODO: crbug.com/379109454 - Fix flakiness of the test.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #define MAYBE_WaitForNTP DISABLED_WaitForNTP
 #else
 #define MAYBE_WaitForNTP WaitForNTP
@@ -611,32 +551,6 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, DISABLED_IncognitoSplitMode) {
   }
 }
 
-class LazyBackgroundPageApiWithBFCacheParamTest
-    : public LazyBackgroundPageApiTest,
-      public testing::WithParamInterface<bool> {
- public:
-  LazyBackgroundPageApiWithBFCacheParamTest() {
-    if (IsBackForwardCacheEnabled()) {
-      feature_list_.InitWithFeaturesAndParameters(
-          {{features::kBackForwardCache, {{"enable_same_site", "true"}}},
-           // Allow BackForwardCache for all devices regardless of their memory.
-           {features::kBackForwardCacheMemoryControls, {}}},
-          {});
-    } else {
-      feature_list_.InitWithFeaturesAndParameters(
-          {}, {features::kBackForwardCache});
-    }
-  }
-  bool IsBackForwardCacheEnabled() { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         LazyBackgroundPageApiWithBFCacheParamTest,
-                         testing::Bool());
-
 // Tests that messages from the content script activate the lazy background
 // page, and keep it alive until all channels are closed.
 // http://crbug.com/1179524; test fails occasionally on OS X 10.15
@@ -645,8 +559,7 @@ INSTANTIATE_TEST_SUITE_P(All,
 #else
 #define MAYBE_Messaging Messaging
 #endif
-IN_PROC_BROWSER_TEST_P(LazyBackgroundPageApiWithBFCacheParamTest,
-                       MAYBE_Messaging) {
+IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, MAYBE_Messaging) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(LoadExtensionAndWait("messaging"));
 
@@ -669,33 +582,29 @@ IN_PROC_BROWSER_TEST_P(LazyBackgroundPageApiWithBFCacheParamTest,
 
   // Navigate away
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
-
-  if (IsBackForwardCacheEnabled()) {
-    // When the page is stored back/forward cache, the message channel should be
-    // kept.
-    WaitForLoadStop(browser()->tab_strip_model()->GetActiveWebContents());
-    EXPECT_TRUE(IsBackgroundPageAlive(last_loaded_extension_id()));
-  } else {
-    // Without back/forward cache, navigating away triggers closing the message
-    // channel and therefore the background page.
-    host_helper.WaitForHostDestroyed();
-    EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
-  }
+  // Navigating away triggers closing the message channel and
+  // therefore the background page.
+  host_helper.WaitForHostDestroyed();
+  EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
 }
 
 // Tests that the lazy background page receives the unload event when we
 // close it, and that it can execute simple API calls that don't require an
 // asynchronous response.
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, OnUnload) {
-  ASSERT_TRUE(LoadExtensionAndWait("on_unload"));
+  const Extension* extension = LoadExtensionAndWait("on_unload");
+  ASSERT_TRUE(extension);
 
   // Lazy Background Page has been shut down.
   EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
 
-  // The browser action has a new title.
-  auto browser_action = ExtensionActionTestHelper::Create(browser());
-  ASSERT_EQ(1, browser_action->NumberOfBrowserActions());
-  EXPECT_EQ("Success", browser_action->GetTooltip(last_loaded_extension_id()));
+  // The extension's action has a new title.
+  ExtensionAction* extension_action =
+      ExtensionActionManager::Get(browser()->profile())
+          ->GetExtensionAction(*extension);
+  ASSERT_TRUE(extension_action);
+  EXPECT_EQ("Success",
+            extension_action->GetTitle(ExtensionAction::kDefaultTabId));
 }
 
 // Tests that both a regular page and an event page will receive events when
@@ -785,7 +694,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, EventListenerCleanup) {
 
 // Tests that an extension can fetch a file scheme URL from the lazy background
 // page, if it has file access.
-// TODO(crbug.com/1283851): Deflake test.
+// TODO(crbug.com/40813949): Deflake test.
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
                        DISABLED_FetchFileSchemeURLWithFileAccess) {
   ASSERT_TRUE(RunExtensionTest(
@@ -814,7 +723,7 @@ class PictureInPictureLazyBackgroundPageApiTest
   PictureInPictureLazyBackgroundPageApiTest& operator=(
       const PictureInPictureLazyBackgroundPageApiTest&) = delete;
 
-  ~PictureInPictureLazyBackgroundPageApiTest() override {}
+  ~PictureInPictureLazyBackgroundPageApiTest() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
     LazyBackgroundPageApiTest::SetUpInProcessBrowserTestFixture();

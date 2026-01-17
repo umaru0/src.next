@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include "content/public/renderer/render_frame.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_performance.h"
+#include "third_party/blink/public/web/web_performance_metrics_for_reporting.h"
 
 namespace {
 
 std::vector<std::string> WebStringVectorToStl(
-    const blink::WebVector<blink::WebString>& web_vector) {
+    const std::vector<blink::WebString>& web_vector) {
   std::vector<std::string> stl_vector;
   for (const blink::WebString& web_string : web_vector)
     stl_vector.push_back(web_string.Utf8());
@@ -49,7 +49,7 @@ RenderFrameFontFamilyAccessor::~RenderFrameFontFamilyAccessor() {
 bool RenderFrameFontFamilyAccessor::ShouldGetFontNames() const {
   return !render_frame()
               ->GetWebFrame()
-              ->Performance()
+              ->PerformanceMetricsForReporting()
               .FirstContentfulPaintRenderedButNotPresentedAsMonotonicTime()
               .is_null();
 }
@@ -96,7 +96,5 @@ void RenderFrameFontFamilyAccessor::ReadyToCommitNavigation(
 
 void RenderFrameFontFamilyAccessor::RunCallback(
     GetFontFamilyNamesCallback callback) {
-  std::move(callback).Run(
-      WebStringVectorToStl(family_names_->primary_family_names),
-      WebStringVectorToStl(family_names_->fallback_family_names));
+  std::move(callback).Run(WebStringVectorToStl(family_names_->font_names));
 }

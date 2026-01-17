@@ -1,10 +1,11 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/layout/layout_theme_linux.h"
 
 #include "third_party/blink/public/resources/grit/blink_resources.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/platform/data_resource_helper.h"
 
 namespace blink {
@@ -19,8 +20,10 @@ LayoutTheme& LayoutTheme::NativeTheme() {
 }
 
 String LayoutThemeLinux::ExtraDefaultStyleSheet() {
-  return LayoutThemeDefault::ExtraDefaultStyleSheet() +
-         UncompressResourceAsASCIIString(IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS);
+  String stylesheet =
+      LayoutThemeDefault::ExtraDefaultStyleSheet() +
+      UncompressResourceAsASCIIString(IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS);
+  return stylesheet;
 }
 
 }  // namespace blink

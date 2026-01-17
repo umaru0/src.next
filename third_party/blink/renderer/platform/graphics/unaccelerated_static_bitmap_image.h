@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
@@ -26,9 +27,7 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
       PaintImage,
       ImageOrientation orientation = ImageOrientationEnum::kDefault);
 
-  bool CurrentFrameKnownToBeOpaque() override;
-  scoped_refptr<StaticBitmapImage> ConvertToColorSpace(sk_sp<SkColorSpace>,
-                                                       SkColorType) override;
+  bool IsOpaque() override;
 
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
@@ -40,12 +39,27 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
 
   void Transfer() final;
 
-  bool CopyToResourceProvider(CanvasResourceProvider*) override;
+  bool CopyToResourceProvider(CanvasResourceProvider* resource_provider,
+                              const gfx::Rect& copy_rect) override;
+
+  SkImageInfo GetSkImageInfo() const;
+  gfx::Size GetSize() const override {
+    return gfx::Size(GetSkImageInfo().width(), GetSkImageInfo().height());
+  }
+  SkAlphaType GetAlphaType() const override {
+    return GetSkImageInfo().alphaType();
+  }
+  gfx::ColorSpace GetColorSpace() const override {
+    return SkColorSpaceToGfxColorSpace(GetSkImageInfo().refColorSpace());
+  }
+  viz::SharedImageFormat GetSharedImageFormat() const override {
+    return viz::SkColorTypeToSinglePlaneSharedImageFormat(
+        GetSkImageInfo().colorType());
+  }
 
  private:
   UnacceleratedStaticBitmapImage(sk_sp<SkImage>, ImageOrientation);
   UnacceleratedStaticBitmapImage(PaintImage, ImageOrientation);
-  SkImageInfo GetSkImageInfoInternal() const override;
 
   PaintImage paint_image_;
   THREAD_CHECKER(thread_checker_);

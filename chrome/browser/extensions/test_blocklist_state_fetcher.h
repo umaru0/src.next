@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,8 +27,8 @@ class TestBlocklistStateFetcher {
   void SetBlocklistVerdict(const std::string& id,
                            ClientCRXListInfoResponse_Verdict state);
 
-  // Send the appropriate response for the request for extension with id |id|.
-  // Return false, if fetcher with fiven id doesn't exist or in case of
+  // Send the appropriate response for the request for extension with id `id`.
+  // Return false, if fetcher with given id doesn't exist or in case of
   // incorrect request. Otherwise return true.
   bool HandleFetcher(const std::string& id);
 

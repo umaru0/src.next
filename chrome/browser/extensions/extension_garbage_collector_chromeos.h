@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@ class ExtensionGarbageCollectorChromeOS : public ExtensionGarbageCollector {
   static ExtensionGarbageCollectorChromeOS* Get(
       content::BrowserContext* context);
 
-  // Enable or disable garbage collection. See |disable_garbage_collection_|.
+  // Enable or disable garbage collection. See `disable_garbage_collection_`.
   void disable_garbage_collection() { disable_garbage_collection_ = true; }
   void enable_garbage_collection() { disable_garbage_collection_ = false; }
 

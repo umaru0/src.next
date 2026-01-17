@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,10 +41,13 @@ bool NavEntryIsInstantNTP(content::WebContents* contents,
 // in an Instant process.
 bool IsInstantNTPURL(const GURL& url, Profile* profile);
 
+// Returns true if |url| corresponds to a Split View New Tab page.
+bool IsSplitViewNewTabPage(const GURL& url);
+
 // Returns the New Tab page URL for the given |profile|.
 GURL GetNewTabPageURL(Profile* profile);
 
-#if !BUILDFLAG(IS_ANDROID) || true
+#if !BUILDFLAG(IS_ANDROID)
 
 // Returns true if |url| should be rendered in the Instant renderer process.
 bool ShouldAssignURLToInstantRenderer(const GURL& url, Profile* profile);

@@ -1,15 +1,20 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/base/host_port_pair.h"
 
+#include <optional>
+
+#include "base/values.h"
 #include "net/test/gtest_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 
 using std::string;
+using testing::Optional;
 
 namespace net {
 
@@ -34,7 +39,7 @@ TEST(HostPortPairTest, Parsing) {
   string foo_str = foo.ToString();
   EXPECT_EQ("foo.com:10", foo_str);
   HostPortPair bar = HostPortPair::FromString(foo_str);
-  EXPECT_TRUE(foo.Equals(bar));
+  EXPECT_EQ(foo, bar);
 }
 
 TEST(HostPortPairTest, ParsingIpv6) {
@@ -42,7 +47,7 @@ TEST(HostPortPairTest, ParsingIpv6) {
   string foo_str = foo.ToString();
   EXPECT_EQ("[2001:db8::42]:100", foo_str);
   HostPortPair bar = HostPortPair::FromString(foo_str);
-  EXPECT_TRUE(foo.Equals(bar));
+  EXPECT_EQ(foo, bar);
 }
 
 TEST(HostPortPairTest, BadString) {
@@ -119,10 +124,10 @@ TEST(HostPortPairTest, Equals) {
 
   HostPortPair new_a_10("a.com", 10);
 
-  EXPECT_TRUE(new_a_10.Equals(a_10));
-  EXPECT_FALSE(new_a_10.Equals(a_11));
-  EXPECT_FALSE(new_a_10.Equals(b_10));
-  EXPECT_FALSE(new_a_10.Equals(b_11));
+  EXPECT_EQ(new_a_10, a_10);
+  EXPECT_NE(new_a_10, a_11);
+  EXPECT_NE(new_a_10, b_10);
+  EXPECT_NE(new_a_10, b_11);
 }
 
 TEST(HostPortPairTest, ParsesFromUrl) {
@@ -153,6 +158,39 @@ TEST(HostPortPairTest, ParsesFromSchemeHostPortWithIpv6Brackets) {
   HostPortPair expected("::1022", 112);
 
   EXPECT_EQ(parsed, expected);
+}
+
+TEST(HostPortPairTest, RoundtripThroughValue) {
+  HostPortPair pair("foo.test", 1456);
+  base::Value value = pair.ToValue();
+
+  EXPECT_THAT(HostPortPair::FromValue(value), Optional(pair));
+}
+
+TEST(HostPortPairTest, DeserializeGarbageValue) {
+  base::Value value(43);
+  EXPECT_FALSE(HostPortPair::FromValue(value).has_value());
+}
+
+TEST(HostPortPairTest, DeserializeMalformedValues) {
+  base::Value valid_value = HostPortPair("foo.test", 123).ToValue();
+  ASSERT_TRUE(HostPortPair::FromValue(valid_value).has_value());
+
+  base::Value missing_host = valid_value.Clone();
+  ASSERT_TRUE(missing_host.GetDict().Remove("host"));
+  EXPECT_FALSE(HostPortPair::FromValue(missing_host).has_value());
+
+  base::Value missing_port = valid_value.Clone();
+  ASSERT_TRUE(missing_port.GetDict().Remove("port"));
+  EXPECT_FALSE(HostPortPair::FromValue(missing_port).has_value());
+
+  base::Value negative_port = valid_value.Clone();
+  *negative_port.GetDict().Find("port") = base::Value(-1);
+  EXPECT_FALSE(HostPortPair::FromValue(negative_port).has_value());
+
+  base::Value large_port = valid_value.Clone();
+  *large_port.GetDict().Find("port") = base::Value(66000);
+  EXPECT_FALSE(HostPortPair::FromValue(large_port).has_value());
 }
 
 }  // namespace

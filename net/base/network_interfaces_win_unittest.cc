@@ -1,16 +1,20 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/base/network_interfaces_win.h"
 
-#include <iphlpapi.h>
 #include <objbase.h>
 
+#include <iphlpapi.h>
+
+#include <array>
 #include <ostream>
 #include <string>
 #include <unordered_set>
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -42,7 +46,7 @@ bool FillAdapterAddress(IP_ADAPTER_ADDRESSES* adapter_address,
                         const char* ifname,
                         const IPAddress& ip_address,
                         const IPAddress& ip_netmask,
-                        sockaddr_storage sock_addrs[2]) {
+                        std::array<sockaddr_storage, 2>& sock_addrs) {
   adapter_address->AdapterName = const_cast<char*>(ifname);
   adapter_address->FriendlyName = const_cast<PWCHAR>(L"interface");
   adapter_address->IfType = IF_TYPE_ETHERNET_CSMACD;
@@ -52,6 +56,14 @@ bool FillAdapterAddress(IP_ADAPTER_ADDRESSES* adapter_address,
   adapter_address->FirstUnicastAddress->SuffixOrigin = IpSuffixOriginOther;
   adapter_address->FirstUnicastAddress->PreferredLifetime = 100;
   adapter_address->FirstUnicastAddress->ValidLifetime = 1000;
+
+  DCHECK(sizeof(adapter_address->PhysicalAddress) > 5);
+  // Generate 06:05:04:03:02:01
+  adapter_address->PhysicalAddressLength = 6;
+  auto physical_address = base::span(adapter_address->PhysicalAddress);
+  for (size_t i = 0; i < adapter_address->PhysicalAddressLength; i++) {
+    physical_address[i] = adapter_address->PhysicalAddressLength - i;
+  }
 
   socklen_t sock_len = sizeof(sockaddr_storage);
 
@@ -94,7 +106,7 @@ TEST(NetworkInterfacesTest, NetworkListTrimmingWindows) {
   IPAddress ipv6_prefix(kIPv6AddrPrefix);
 
   NetworkInterfaceList results;
-  sockaddr_storage addresses[2];
+  std::array<sockaddr_storage, 2> addresses;
   IP_ADAPTER_ADDRESSES adapter_address = {};
   IP_ADAPTER_UNICAST_ADDRESS address = {};
   IP_ADAPTER_PREFIX adapter_prefix = {};
@@ -188,6 +200,54 @@ TEST(NetworkInterfacesTest, NetworkListTrimmingWindows) {
   results.clear();
 }
 
+TEST(NetworkInterfacesTest, NetworkListExtractMacAddress) {
+  IPAddress ipv6_local_address(kIPv6LocalAddr);
+  IPAddress ipv6_address(kIPv6Addr);
+  IPAddress ipv6_prefix(kIPv6AddrPrefix);
+
+  NetworkInterfaceList results;
+  std::array<sockaddr_storage, 2> addresses;
+  IP_ADAPTER_ADDRESSES adapter_address = {};
+  IP_ADAPTER_UNICAST_ADDRESS address = {};
+  IP_ADAPTER_PREFIX adapter_prefix = {};
+  adapter_address.FirstUnicastAddress = &address;
+  adapter_address.FirstPrefix = &adapter_prefix;
+
+  ASSERT_TRUE(FillAdapterAddress(&adapter_address, kIfnameEm1, ipv6_address,
+                                 ipv6_prefix, addresses));
+
+  Eui48MacAddress expected_mac_address = {0x6, 0x5, 0x4, 0x3, 0x2, 0x1};
+
+  EXPECT_TRUE(internal::GetNetworkListImpl(
+      &results, INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES, &adapter_address));
+  ASSERT_EQ(results.size(), 1ul);
+  ASSERT_EQ(results[0].mac_address, expected_mac_address);
+}
+
+TEST(NetworkInterfacesTest, NetworkListExtractMacAddressInvalidLength) {
+  IPAddress ipv6_local_address(kIPv6LocalAddr);
+  IPAddress ipv6_address(kIPv6Addr);
+  IPAddress ipv6_prefix(kIPv6AddrPrefix);
+
+  NetworkInterfaceList results;
+  std::array<sockaddr_storage, 2> addresses;
+  IP_ADAPTER_ADDRESSES adapter_address = {};
+  IP_ADAPTER_UNICAST_ADDRESS address = {};
+  IP_ADAPTER_PREFIX adapter_prefix = {};
+  adapter_address.FirstUnicastAddress = &address;
+  adapter_address.FirstPrefix = &adapter_prefix;
+
+  ASSERT_TRUE(FillAdapterAddress(&adapter_address, kIfnameEm1, ipv6_address,
+                                 ipv6_prefix, addresses));
+  // Not EUI-48 Mac address, so it is not extracted.
+  adapter_address.PhysicalAddressLength = 8;
+
+  EXPECT_TRUE(internal::GetNetworkListImpl(
+      &results, INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES, &adapter_address));
+  ASSERT_EQ(results.size(), 1ul);
+  EXPECT_FALSE(results[0].mac_address.has_value());
+}
+
 bool read_int_or_bool(DWORD data_size, PVOID data) {
   switch (data_size) {
     case 1:
@@ -196,7 +256,6 @@ bool read_int_or_bool(DWORD data_size, PVOID data) {
       return !!*reinterpret_cast<uint32_t*>(data);
     default:
       LOG(FATAL) << "That is not a type I know!";
-      return false;
   }
 }
 
@@ -220,13 +279,14 @@ int GetWifiOptions() {
   std::unique_ptr<WLAN_INTERFACE_INFO_LIST, internal::WlanApiDeleter>
       interface_list(interface_list_ptr);
 
-  for (unsigned i = 0; i < interface_list->dwNumberOfItems; ++i) {
-    WLAN_INTERFACE_INFO* info = &interface_list->InterfaceInfo[i];
+  base::span<WLAN_INTERFACE_INFO> interfaces =
+      internal::WlanInterfaceInfoListToSpan(interface_list.get());
+  for (auto& info : interfaces) {
     DWORD data_size;
     PVOID data;
     int options = 0;
     result =
-        wlanapi.query_interface_func(client.Get(), &info->InterfaceGuid,
+        wlanapi.query_interface_func(client.Get(), &info.InterfaceGuid,
                                      wlan_intf_opcode_background_scan_enabled,
                                      nullptr, &data_size, &data, nullptr);
     if (result != ERROR_SUCCESS)
@@ -236,7 +296,7 @@ int GetWifiOptions() {
     }
     internal::WlanApi::GetInstance().free_memory_func(data);
 
-    result = wlanapi.query_interface_func(client.Get(), &info->InterfaceGuid,
+    result = wlanapi.query_interface_func(client.Get(), &info.InterfaceGuid,
                                           wlan_intf_opcode_media_streaming_mode,
                                           nullptr, &data_size, &data, nullptr);
     if (result != ERROR_SUCCESS)
@@ -263,8 +323,14 @@ void TryChangeWifiOptions(int options) {
   EXPECT_EQ(previous_options, GetWifiOptions());
 }
 
+// Test fails on Win Arm64 bots. TODO(crbug.com/40260910): Fix on bot.
+#if BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
+#define MAYBE_SetWifiOptions DISABLED_SetWifiOptions
+#else
+#define MAYBE_SetWifiOptions SetWifiOptions
+#endif
 // Test SetWifiOptions().
-TEST(NetworkInterfacesTest, SetWifiOptions) {
+TEST(NetworkInterfacesTest, MAYBE_SetWifiOptions) {
   TryChangeWifiOptions(0);
   TryChangeWifiOptions(WIFI_OPTIONS_DISABLE_SCAN);
   TryChangeWifiOptions(WIFI_OPTIONS_MEDIA_STREAMING_MODE);

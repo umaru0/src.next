@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,9 @@ class MockExternalProvider : public ExternalProviderInterface {
   // ExternalProviderInterface implementation:
   void VisitRegisteredExtension() override;
   bool HasExtension(const std::string& id) const override;
+  bool HasExtensionWithLocation(
+      const std::string& id,
+      mojom::ManifestLocation location) const override;
   bool GetExtensionDetails(
       const std::string& id,
       mojom::ManifestLocation* location,

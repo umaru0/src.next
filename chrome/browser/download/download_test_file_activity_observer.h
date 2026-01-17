@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,10 @@ class DownloadTestFileActivityObserver {
   // Returns true if a file chooser dialog was displayed since the last time
   // this method was called.
   bool TestAndResetDidShowFileChooser();
+
+  // Sets whether the MockDownloadManagerDelegate calls the base class for
+  // OpenDownload(), instead of overriding it as a no-op.
+  void SetAllowOpenDownload(bool allow);
 
  private:
   class MockDownloadManagerDelegate;

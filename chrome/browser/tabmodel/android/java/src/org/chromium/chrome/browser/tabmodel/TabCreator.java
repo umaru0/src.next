@@ -1,60 +1,81 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tabmodel;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import org.chromium.base.TraceEvent;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabState;
-import org.chromium.chrome.browser.tab.state.SerializedCriticalPersistedTabData;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.GURL;
 
-import java.nio.ByteBuffer;
-import org.chromium.base.ContextUtils;
-
 /**
- * Creates Tabs.  If the TabCreator creates Tabs asynchronously, null pointers will be returned
+ * Creates Tabs. If the TabCreator creates Tabs asynchronously, null pointers will be returned
  * everywhere instead of a Tab.
  *
- * TODO(dfalcantara): Hunt down more places where we don't actually need to return a Tab.
+ * <p>TODO(dfalcantara): Hunt down more places where we don't actually need to return a Tab.
  */
+@NullMarked
 public abstract class TabCreator {
-    /**
-     * @return Whether the TabCreator creates Tabs asynchronously.
-     */
-    public abstract boolean createsTabsAsynchronously();
 
     /**
      * Creates a new tab and posts to UI.
+     *
      * @param loadUrlParams parameters of the url load.
      * @param type Information about how the tab was launched.
      * @param parent the parent tab, if present.
      * @return The new tab or null if no tab was created.
      */
-    @Nullable
-    public abstract Tab createNewTab(
-            LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent);
+    public abstract @Nullable Tab createNewTab(
+            LoadUrlParams loadUrlParams, @TabLaunchType int type, @Nullable Tab parent);
 
     /**
-     * On restore, allows us to create a frozen version of a tab using saved tab state we read
-     * from disk.
-     * @param state    The tab state that the tab can be restored from.
-     * @param serializedCriticalPersistedTabData serialized {@link CriticalPersistedTabData}
-     * @param id       The id to give the new tab.
-     * @param isIncognito if the {@link Tab} is incognito or not
-     * @param index    The index for where to place the tab.
+     * Creates a new tab and posts to UI.
+     *
+     * @param loadUrlParams parameters of the url load.
+     * @param type Information about how the tab was launched.
+     * @param parent the parent tab, if present.
+     * @param position the requested position (index in the tab model)
+     * @return The new tab or null if no tab was created.
      */
-    public abstract Tab createFrozenTab(TabState state,
-            SerializedCriticalPersistedTabData serializedCriticalPersistedTabData, int id,
-            boolean isIncognito, int index);
+    public abstract @Nullable Tab createNewTab(
+            LoadUrlParams loadUrlParams,
+            @TabLaunchType int type,
+            @Nullable Tab parent,
+            int position);
+
+    /**
+     * Creates a new tab and posts to UI.
+     *
+     * @param loadUrlParams parameters of the url load.
+     * @param title The title to use for a lazily loaded tab.
+     * @param type Information about how the tab was launched.
+     * @param parent the parent tab, if present.
+     * @param position the requested position (index in the tab model)
+     * @return The new tab or null if no tab was created.
+     */
+    public abstract @Nullable Tab createNewTab(
+            LoadUrlParams loadUrlParams,
+            String title,
+            @TabLaunchType int type,
+            @Nullable Tab parent,
+            int position);
+
+    /**
+     * On restore, allows us to create a frozen version of a tab using saved tab state we read from
+     * disk.
+     *
+     * @param state The tab state that the tab can be restored from.
+     * @param id The id to give the new tab.
+     * @param index The index for where to place the tab.
+     */
+    public abstract Tab createFrozenTab(TabState state, int id, int index);
 
     /**
      * Creates a new tab and loads the specified URL in it. This is a convenience method for
@@ -65,53 +86,116 @@ public abstract class TabCreator {
      *             opened (for example, in the foreground or background).
      * @return The new tab or null if no tab was created.
      */
-    @Nullable
-    public abstract Tab launchUrl(String url, @TabLaunchType int type);
+    public abstract @Nullable Tab launchUrl(String url, @TabLaunchType int type);
 
     /**
      * Creates a Tab to host the given WebContents.
-     * @param parent      The parent tab, if present.
-     * @param webContents The web contents to create a tab around.
-     * @param type        The TabLaunchType describing how this tab was created.
-     * @param url         URL to show in the Tab. (Needed only for asynchronous tab creation.)
-     * @return            Whether a Tab was created successfully.
+     *
+     * @param parent The parent Tab, if present.
+     * @param shouldPin Whether the newly created tab should be pinned.
+     * @param webContents The web contents to create a Tab around.
+     * @param type The TabLaunchType describing how this Tab was created.
+     * @param url URL to show in the Tab. (Needed only for asynchronous tab creation.)
+     * @param addTabToModel Whether the newly created Tab should be added to the tab model.
+     *     Typically this should be true, however, sometimes it is beneficial to create a Tab
+     *     without adding it to the current TabModel (e.g. if the Tab will ultimately be shown to
+     *     the user in a new window).
+     * @return The new Tab or null if a Tab was not created successfully.
      */
-    public abstract boolean createTabWithWebContents(@Nullable Tab parent, WebContents webContents,
-            @TabLaunchType int type, @NonNull GURL url);
+    public abstract @Nullable Tab createTabWithWebContents(
+            @Nullable Tab parent,
+            boolean shouldPin,
+            WebContents webContents,
+            @TabLaunchType int type,
+            GURL url,
+            boolean addTabToModel);
 
     /**
-     * Creates a tab around the native web contents pointer.
-     * @param parent      The parent tab, if present.
-     * @param webContents The web contents to create a tab around.
-     * @param type        The TabLaunchType describing how this tab was created.
-     * @return            Whether a Tab was created successfully.
+     * Creates a Tab to host the given WebContents and adds it to the TabModel.
+     *
+     * @param parent The parent Tab, if present.
+     * @param webContents The web contents to create a Tab around.
+     * @param type The TabLaunchType describing how this Tab was created.
+     * @return The new Tab or null if a Tab was not created successfully.
      */
-    public final boolean createTabWithWebContents(
-            Tab parent, WebContents webContents, @TabLaunchType int type) {
+    public final @Nullable Tab createTabWithWebContents(
+            @Nullable Tab parent, WebContents webContents, @TabLaunchType int type) {
         return createTabWithWebContents(parent, webContents, type, webContents.getVisibleUrl());
     }
 
     /**
-     * Creates a new tab and loads the NTP.
+     * Creates a Tab to host the given WebContents and adds it to the TabModel.
+     *
+     * @param parent The parent Tab, if present.
+     * @param shouldPin Whether the newly created tab should be pinned.
+     * @param webContents The web contents to create a Tab around.
+     * @param type The TabLaunchType describing how this Tab was created.
+     * @return The new Tab or null if a Tab was not created successfully.
      */
-    public final void launchNTP() {
-        try {
-            TraceEvent.begin("TabCreator.launchNTP");
-            launchUrl(ContextUtils.getAppSharedPreferences().getString("active_homepage", "chrome://newtab"), TabLaunchType.FROM_CHROME_UI);
-        } finally {
-            TraceEvent.end("TabCreator.launchNTP");
-        }
+    public final @Nullable Tab createTabWithWebContents(
+            @Nullable Tab parent,
+            boolean shouldPin,
+            WebContents webContents,
+            @TabLaunchType int type) {
+        return createTabWithWebContents(
+                parent,
+                shouldPin,
+                webContents,
+                type,
+                webContents.getVisibleUrl(),
+                /* addTabToModel= */ true);
     }
 
     /**
-     * Creates a new tab and loads the NTP.
+     * Creates a Tab to host the given WebContents and adds it to the TabModel.
+     *
+     * @param parent The parent Tab, if present.
+     * @param webContents The web contents to create a Tab around.
+     * @param type The TabLaunchType describing how this Tab was created.
+     * @param url URL to show in the Tab. (Needed only for asynchronous tab creation.)
+     * @return The new Tab or null if a Tab was not created successfully.
      */
-    public final void launchIncognitoNTP() {
+    public final @Nullable Tab createTabWithWebContents(
+            @Nullable Tab parent, WebContents webContents, @TabLaunchType int type, GURL url) {
+        return createTabWithWebContents(
+                parent, /* shouldPin= */ false, webContents, type, url, /* addTabToModel= */ true);
+    }
+
+    /**
+     * Creates a {@link Tab} with the same history stack as {@param parent}.
+     *
+     * @param parent The tab to copy.
+     * @param type The {@code TabLaunchType} (should be {@code FROM_HISTORY_NAVIGATION_FOREGROUND}
+     *     or {@code FROM_HISTORY_NAVIGATION_BACKGROUND}.
+     * @return The {@link Tab} which was created.
+     */
+    public @Nullable abstract Tab createTabWithHistory(Tab parent, @TabLaunchType int type);
+
+    /** Creates a new tab and loads the NTP. */
+    public final void launchNtp() {
+        launchNtp(TabLaunchType.FROM_CHROME_UI);
+    }
+
+    /** Creates a new tab and loads the NTP. */
+    public final void launchNtp(@TabLaunchType int type) {
         try {
-            TraceEvent.begin("TabCreator.launchNTP");
-            launchUrl("chrome-search://local-ntp/incognito-ntp.html", TabLaunchType.FROM_CHROME_UI);
+            TraceEvent.begin("TabCreator.launchNtp");
+            launchUrl(UrlConstants.NTP_URL, type);
         } finally {
-            TraceEvent.end("TabCreator.launchNTP");
+            TraceEvent.end("TabCreator.launchNtp");
         }
+    }
+
+    /** Semi-tag interface to denote dependency and provide a setter for {@link TabModel}. */
+    public interface NeedsTabModel {
+        void setTabModel(TabModel tabModel);
+    }
+
+    /**
+     * Semi-tag interface to denote dependency and provide a setter for {@link
+     * TabModelOrderController}.
+     */
+    public interface NeedsTabModelOrderController {
+        void setTabModelOrderController(TabModelOrderController tabModelOrderController);
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <string>
 
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "net/android/network_library.h"
@@ -22,12 +21,6 @@ bool PlatformMimeUtil::GetPlatformMimeTypeFromExtension(
     const base::FilePath::StringType& ext,
     std::string* result) const {
   return android::GetMimeTypeFromExtension(ext, result);
-}
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
-bool PlatformMimeUtil::GetPlatformMimeTypeFromExtension(
-    const base::FilePath::StringType& ext,
-    std::string* result) const {
-  return false;
 }
 #else
 bool PlatformMimeUtil::GetPlatformMimeTypeFromExtension(
@@ -56,7 +49,7 @@ bool PlatformMimeUtil::GetPlatformMimeTypeFromExtension(
 #endif  // BUILDFLAG(IS_ANDROID)
 
 bool PlatformMimeUtil::GetPlatformPreferredExtensionForMimeType(
-    const std::string& mime_type,
+    std::string_view mime_type,
     base::FilePath::StringType* ext) const {
   // xdg_mime doesn't provide an API to get extension from a MIME type, so we
   // rely on the mappings hardcoded in mime_util.cc .
@@ -64,7 +57,7 @@ bool PlatformMimeUtil::GetPlatformPreferredExtensionForMimeType(
 }
 
 void PlatformMimeUtil::GetPlatformExtensionsForMimeType(
-    const std::string& mime_type,
+    std::string_view mime_type,
     std::unordered_set<base::FilePath::StringType>* extensions) const {
   // xdg_mime doesn't provide an API to get extension from a MIME type, so we
   // rely on the mappings hardcoded in mime_util.cc .

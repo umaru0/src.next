@@ -62,7 +62,7 @@ class ComputedStyle;
 // PaintLayerStackingNode represents a stacked element which is either a
 // stacking context or a positioned element.
 // See
-// https://chromium.googlesource.com/chromium/src.git/+/master/third_party/blink/renderer/core/paint/README.md
+// https://chromium.googlesource.com/chromium/src.git/+/main/third_party/blink/renderer/core/paint/README.md
 // for more details of stacked elements.
 //
 // Stacked elements are the basis for the CSS painting algorithm. The paint
@@ -103,6 +103,7 @@ class CORE_EXPORT PaintLayerStackingNode
                              const ComputedStyle* old_style);
 
   using PaintLayers = HeapVector<Member<PaintLayer>>;
+  using GCedPaintLayers = GCedHeapVector<Member<PaintLayer>>;
 
   const PaintLayers& PosZOrderList() const {
     DCHECK(!z_order_lists_dirty_);
@@ -113,18 +114,13 @@ class CORE_EXPORT PaintLayerStackingNode
     return neg_z_order_list_;
   }
 
-  const PaintLayers* LayersPaintingOverlayOverflowControlsAfter(
+  const GCedPaintLayers* LayersPaintingOverlayOverflowControlsAfter(
       const PaintLayer* layer) const {
     DCHECK(!z_order_lists_dirty_);
     auto it = layer_to_overlay_overflow_controls_painting_after_.find(layer);
     return it == layer_to_overlay_overflow_controls_painting_after_.end()
                ? nullptr
-               : it->value;
-  }
-
-  const PaintLayers& OverlayOverflowControlsReorderedList() const {
-    DCHECK(!z_order_lists_dirty_);
-    return overlay_overflow_controls_reordered_list_;
+               : it->value.Get();
   }
 
   void ClearNeedsReorderOverlayOverflowControls();
@@ -136,8 +132,6 @@ class CORE_EXPORT PaintLayerStackingNode
 
   struct HighestLayers;
   void CollectLayers(PaintLayer&, HighestLayers*);
-
-  Member<PaintLayer> layer_;
 
   // Holds a sorted list of all the descendant nodes within that have z-indices
   // of 0 (or is treated as 0 for positioned objects) or greater.
@@ -186,13 +180,10 @@ class CORE_EXPORT PaintLayerStackingNode
   // context with overlay overflow controls.
   // For the above example, this map has one entry {child: target} which means
   // that |target|'s overlay overflow controls should be painted after |child|.
-  HeapHashMap<Member<const PaintLayer>, Member<PaintLayers>>
+  HeapHashMap<Member<const PaintLayer>, Member<GCedPaintLayers>>
       layer_to_overlay_overflow_controls_painting_after_;
 
-  // All PaintLayers (just in current stacking context, child stacking contexts
-  // will have their own list) that have overlay overflow controls that should
-  // paint reordered. For the above example, this has one entry {target}.
-  PaintLayers overlay_overflow_controls_reordered_list_;
+  Member<PaintLayer> layer_;
 
   // Indicates whether the z-order lists above are dirty.
   bool z_order_lists_dirty_ = true;

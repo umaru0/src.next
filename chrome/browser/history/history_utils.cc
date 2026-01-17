@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,20 +20,11 @@ bool CanAddURLToHistory(const GURL& url) {
       url.SchemeIs(url::kContentScheme) ||
       url.SchemeIs(content::kChromeDevToolsScheme) ||
       url.SchemeIs(content::kChromeUIScheme) ||
+      url.SchemeIs(content::kChromeUIUntrustedScheme) ||
       url.SchemeIs(content::kViewSourceScheme) ||
       url.SchemeIs(chrome::kChromeNativeScheme) ||
       url.SchemeIs(chrome::kChromeSearchScheme) ||
       url.SchemeIs(dom_distiller::kDomDistillerScheme))
-    return false;
-
-  if (url.host() == "search.kiwibrowser.org" ||
-      url.host() == "bsearch.kiwibrowser.org" ||
-      url.host() == "ysearch.kiwibrowser.org" ||
-      url.host() == "kiwisearchservices.com" ||
-      url.host() == "kiwisearchservices.net" ||
-      url.host() == "www.kiwisearchservices.com" ||
-      url.host() == "www.kiwisearchservices.net" ||
-      (url.host() == "news.google.com" && url.path().rfind("/articles/", 0) == 0))
     return false;
 
   return true;

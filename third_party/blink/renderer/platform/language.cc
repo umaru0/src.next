@@ -27,6 +27,7 @@
 
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/thread_specific.h"
 
@@ -69,13 +70,9 @@ void InitializePlatformLanguage() {
       const AtomicString, platform_language, (([]() {
         String canonicalized = CanonicalizeLanguageIdentifier(
             Platform::Current()->DefaultLocale());
-        if (!canonicalized.IsEmpty()) {
-          StringImpl* impl = StringImpl::CreateStatic(
-              reinterpret_cast<const char*>(canonicalized.Characters8()),
-              canonicalized.length(),
-              StringHasher::ComputeHashAndMaskTop8Bits(
-                  canonicalized.Characters8(), canonicalized.length()));
-
+        if (!canonicalized.empty()) {
+          StringImpl* impl =
+              StringImpl::CreateStatic(base::as_chars(canonicalized.Span8()));
           return AtomicString(impl);
         }
         return AtomicString();
@@ -88,7 +85,7 @@ void OverrideUserPreferredLanguagesForTesting(
     const Vector<AtomicString>& override) {
   Vector<AtomicString>& canonicalized = PreferredLanguagesOverride();
   canonicalized.resize(0);
-  canonicalized.ReserveCapacity(override.size());
+  canonicalized.reserve(override.size());
   for (const auto& lang : override)
     canonicalized.push_back(CanonicalizeLanguageIdentifier(lang));
   Locale::ResetDefaultLocale();
@@ -96,14 +93,14 @@ void OverrideUserPreferredLanguagesForTesting(
 
 AtomicString DefaultLanguage() {
   Vector<AtomicString>& override = PreferredLanguagesOverride();
-  if (!override.IsEmpty())
+  if (!override.empty())
     return override[0];
   return PlatformLanguage();
 }
 
 Vector<AtomicString> UserPreferredLanguages() {
   Vector<AtomicString>& override = PreferredLanguagesOverride();
-  if (!override.IsEmpty())
+  if (!override.empty())
     return override;
 
   Vector<AtomicString> languages;

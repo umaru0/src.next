@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 
 namespace blink {
 
@@ -89,7 +90,7 @@ class CORE_EXPORT CounterStyle final : public GarbageCollected<CounterStyle> {
   String GetSuffix() const { return suffix_; }
 
   String GenerateRepresentationWithPrefixAndSuffix(int value) const {
-    return prefix_ + GenerateRepresentation(value) + suffix_;
+    return StrCat({prefix_, GenerateRepresentation(value), suffix_});
   }
 
   AtomicString GetExtendsName() const { return extends_name_; }
@@ -168,7 +169,7 @@ class CORE_EXPORT CounterStyle final : public GarbageCollected<CounterStyle> {
   AtomicString extends_name_;
   Member<CounterStyle> extended_style_;
 
-  AtomicString fallback_name_ = "decimal";
+  AtomicString fallback_name_{"decimal"};
   Member<CounterStyle> fallback_style_;
 
   CounterStyleSpeakAs speak_as_ = CounterStyleSpeakAs::kAuto;

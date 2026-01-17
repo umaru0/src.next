@@ -1,6 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
 
 // This file is used to define IPC::ParamTraits<> specializations for a number
 // of types so that they can be serialized over IPC.  IPC::ParamTraits<>
@@ -18,7 +23,6 @@
 
 #include <string>
 
-#include "base/memory/ref_counted.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"

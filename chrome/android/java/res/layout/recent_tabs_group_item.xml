@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2015 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2015 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <org.chromium.chrome.browser.ntp.RecentTabsGroupView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,7 +11,7 @@
     android:id="@+id/recent_tabs_group_view"
     android:layout_height="wrap_content"
     android:layout_width="match_parent"
-    android:background="?attr/selectableItemBackground" >
+    android:background="@drawable/list_item_rounded_background_selector" >
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -46,6 +48,7 @@
         android:layout_centerVertical="true"
         android:layout_marginStart="8dp"
         android:layout_marginEnd="16dp"
+        android:background="@drawable/small_icon_background_selector"
         tools:ignore="ContentDescription" />
 
 </org.chromium.chrome.browser.ntp.RecentTabsGroupView>

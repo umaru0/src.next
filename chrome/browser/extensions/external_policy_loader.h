@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,12 +10,11 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/external_loader.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 class Profile;
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace extensions {
 
@@ -44,7 +43,7 @@ class ExternalPolicyLoader : public ExternalLoader,
   void OnExtensionManagementSettingsChanged() override;
 
   // Adds an extension to be updated to the pref dictionary.
-  static void AddExtension(base::DictionaryValue* dict,
+  static void AddExtension(base::Value::Dict& dict,
                            const std::string& extension_id,
                            const std::string& update_url);
 

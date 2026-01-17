@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,15 @@
 
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/mojo/keep_alive_impl.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/mojom/keep_alive.mojom.h"  // nogncheck
+#include "mojo/public/cpp/bindings/binder_map.h"
 
 namespace extensions {
 

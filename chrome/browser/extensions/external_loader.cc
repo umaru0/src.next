@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,8 @@
 
 #include "base/check_op.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/external_provider_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/external_provider_interface.h"
 
 using content::BrowserThread;
 
@@ -15,7 +15,7 @@ namespace extensions {
 
 ExternalLoader::ExternalLoader() = default;
 
-void ExternalLoader::Init(ExternalProviderImpl* owner) {
+void ExternalLoader::Init(ExternalProviderInterface* owner) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   owner_ = owner;
 }
@@ -35,15 +35,13 @@ void ExternalLoader::OwnerShutdown() {
 
 ExternalLoader::~ExternalLoader() = default;
 
-void ExternalLoader::LoadFinished(
-    std::unique_ptr<base::DictionaryValue> prefs) {
+void ExternalLoader::LoadFinished(base::Value::Dict prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (owner_)
     owner_->SetPrefs(std::move(prefs));
 }
 
-void ExternalLoader::OnUpdated(
-    std::unique_ptr<base::DictionaryValue> updated_prefs) {
+void ExternalLoader::OnUpdated(base::Value::Dict updated_prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (owner_)
     owner_->UpdatePrefs(std::move(updated_prefs));

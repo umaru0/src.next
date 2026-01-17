@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/fonts/font_family.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -42,27 +43,30 @@ namespace blink {
 static bool IsCSSTokenizerIdentifier(const StringView& string) {
   unsigned length = string.length();
 
-  if (!length)
+  if (!length) {
     return false;
+  }
 
-  return WTF::VisitCharacters(string, [](const auto* chars, unsigned length) {
-    const auto* end = chars + length;
+  return VisitCharacters(string, [](auto chars) {
+    size_t index{0};
 
     // -?
-    if (chars != end && chars[0] == '-')
-      ++chars;
-
-    // {nmstart}
-    if (chars == end || !IsNameStartCodePoint(chars[0]))
-      return false;
-    ++chars;
-
-    // {nmchar}*
-    for (; chars != end; ++chars) {
-      if (!IsNameCodePoint(chars[0]))
-        return false;
+    if (chars[index] == '-') {
+      ++index;
     }
 
+    // {nmstart}
+    if (index == chars.size() || !IsNameStartCodePoint(chars[index])) {
+      return false;
+    }
+    ++index;
+
+    // {nmchar}*
+    for (; index < chars.size(); ++index) {
+      if (!IsNameCodePoint(chars[index])) {
+        return false;
+      }
+    }
     return true;
   });
 }
@@ -92,19 +96,21 @@ void SerializeIdentifier(const String& identifier,
 
     index += U16_LENGTH(c);
 
-    if (c == 0)
+    if (c == 0) {
       append_to.Append(0xfffd);
-    else if (c <= 0x1f || c == 0x7f ||
-             (0x30 <= c && c <= 0x39 &&
-              (is_first || (is_second && is_first_char_hyphen))))
+    } else if (c <= 0x1f || c == 0x7f ||
+               (0x30 <= c && c <= 0x39 &&
+                (is_first || (is_second && is_first_char_hyphen)))) {
       SerializeCharacterAsCodePoint(c, append_to);
-    else if (c == 0x2d && is_first && index == identifier.length())
+    } else if (c == 0x2d && is_first && index == identifier.length()) {
       SerializeCharacter(c, append_to);
-    else if (0x80 <= c || c == 0x2d || c == 0x5f || (0x30 <= c && c <= 0x39) ||
-             (0x41 <= c && c <= 0x5a) || (0x61 <= c && c <= 0x7a))
+    } else if (0x80 <= c || c == 0x2d || c == 0x5f ||
+               (0x30 <= c && c <= 0x39) || (0x41 <= c && c <= 0x5a) ||
+               (0x61 <= c && c <= 0x7a)) {
       append_to.Append(c);
-    else
+    } else {
       SerializeCharacter(c, append_to);
+    }
 
     if (is_first) {
       is_first = false;
@@ -124,12 +130,13 @@ void SerializeString(const String& string, StringBuilder& append_to) {
     UChar32 c = string.CharacterStartingAt(index);
     index += U16_LENGTH(c);
 
-    if (c <= 0x1f || c == 0x7f)
+    if (c <= 0x1f || c == 0x7f) {
       SerializeCharacterAsCodePoint(c, append_to);
-    else if (c == 0x22 || c == 0x5c)
+    } else if (c == 0x22 || c == 0x5c) {
       SerializeCharacter(c, append_to);
-    else
+    } else {
       append_to.Append(c);
+    }
   }
 
   append_to.Append('\"');
@@ -142,7 +149,7 @@ String SerializeString(const String& string) {
 }
 
 String SerializeURI(const String& string) {
-  return "url(" + SerializeString(string) + ")";
+  return StrCat({"url(", SerializeString(string), ")"});
 }
 
 String SerializeFontFamily(const AtomicString& string) {

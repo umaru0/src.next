@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,13 +28,9 @@ void GrantMediaStreamRequest(content::WebContents* web_contents,
                              content::MediaResponseCallback callback,
                              const Extension* extension);
 
-// Verifies that the extension has permission for |type|. If not, crash.
+// Verifies that the extension has permission for `type`. If not, crash.
 void VerifyMediaAccessPermission(blink::mojom::MediaStreamType type,
                                  const Extension* extension);
-
-// Check if the extension has permission for |type|.
-bool CheckMediaAccessPermission(blink::mojom::MediaStreamType type,
-                                const Extension* extension);
 
 }  // namespace media_capture_util
 }  // namespace extensions

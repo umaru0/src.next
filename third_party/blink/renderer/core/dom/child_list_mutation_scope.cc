@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/mutation_observer_interest_group.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
+#include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
@@ -46,9 +47,10 @@ typedef HeapHashMap<Member<Node>, Member<ChildListMutationAccumulator>>
     AccumulatorMap;
 
 static AccumulatorMap& GetAccumulatorMap() {
-  DEFINE_STATIC_LOCAL(Persistent<AccumulatorMap>, map,
-                      (MakeGarbageCollected<AccumulatorMap>()));
-  return *map;
+  using AccumulatorMapHolder = DisallowNewWrapper<AccumulatorMap>;
+  DEFINE_STATIC_LOCAL(Persistent<AccumulatorMapHolder>, holder,
+                      (MakeGarbageCollected<AccumulatorMapHolder>()));
+  return holder->Value();
 }
 
 ChildListMutationAccumulator::ChildListMutationAccumulator(
@@ -111,7 +113,7 @@ inline bool ChildListMutationAccumulator::IsRemovedNodeInOrder(Node& child) {
 void ChildListMutationAccumulator::WillRemoveChild(Node& child) {
   DCHECK(HasObservers());
 
-  if (!added_nodes_.IsEmpty() || !IsRemovedNodeInOrder(child))
+  if (!added_nodes_.empty() || !IsRemovedNodeInOrder(child))
     EnqueueMutationRecord();
 
   if (IsEmpty()) {
@@ -140,7 +142,7 @@ void ChildListMutationAccumulator::EnqueueMutationRecord() {
 }
 
 bool ChildListMutationAccumulator::IsEmpty() {
-  bool result = removed_nodes_.IsEmpty() && added_nodes_.IsEmpty();
+  bool result = removed_nodes_.empty() && added_nodes_.empty();
 #if DCHECK_IS_ON()
   if (result) {
     DCHECK(!previous_sibling_);

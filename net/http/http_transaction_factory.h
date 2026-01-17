@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,10 +21,9 @@ class NET_EXPORT HttpTransactionFactory {
  public:
   virtual ~HttpTransactionFactory() = default;
 
-  // Creates a HttpTransaction object. On success, saves the new
-  // transaction to |*trans| and returns OK.
-  virtual int CreateTransaction(RequestPriority priority,
-                                std::unique_ptr<HttpTransaction>* trans) = 0;
+  // Creates a HttpTransaction object.
+  virtual std::unique_ptr<HttpTransaction> CreateTransaction(
+      RequestPriority priority) = 0;
 
   // Returns the associated cache if any (may be NULL).
   virtual HttpCache* GetCache() = 0;

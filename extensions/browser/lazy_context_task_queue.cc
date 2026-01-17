@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,5 +32,10 @@ LazyContextTaskQueue::ContextInfo::ContextInfo(
       worker_thread_id(worker_thread_id),
       url(url),
       browser_context(render_process_host->GetBrowserContext()) {}
+
+LazyContextTaskQueue::ContextInfo::ContextInfo(const ContextInfo& other) =
+    default;
+LazyContextTaskQueue::ContextInfo::ContextInfo(ContextInfo&& other) = default;
+LazyContextTaskQueue::ContextInfo::~ContextInfo() = default;
 
 }  // namespace extensions

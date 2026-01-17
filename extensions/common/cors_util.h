@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,13 +14,13 @@ namespace extensions {
 class Extension;
 
 // Creates a CorsOriginPatternPtr vector that contains allowed origin list
-// for the passed |extension|. Returned vector will be used to register the list
+// for the passed `extension`. Returned vector will be used to register the list
 // to network::NetworkContext and blink::SecurityPolicy.
 std::vector<network::mojom::CorsOriginPatternPtr>
 CreateCorsOriginAccessAllowList(const Extension& extension);
 
 // Creates a CorsOriginPatternPtr vector that contains blocked origin list
-// for the passed |extension|. Returned vector will be used to register the list
+// for the passed `extension`. Returned vector will be used to register the list
 // to network::NetworkContext and blink::SecurityPolicy.
 std::vector<network::mojom::CorsOriginPatternPtr>
 CreateCorsOriginAccessBlockList(const Extension& extension);

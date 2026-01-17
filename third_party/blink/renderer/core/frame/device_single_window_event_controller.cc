@@ -1,8 +1,10 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/frame/device_single_window_event_controller.h"
+
+#include <algorithm>
 
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -68,13 +70,13 @@ void DeviceSingleWindowEventController::DidRemoveAllEventListeners(
 }
 
 bool DeviceSingleWindowEventController::CheckPolicyFeatures(
-    const Vector<mojom::blink::PermissionsPolicyFeature>& features) const {
+    const Vector<network::mojom::PermissionsPolicyFeature>& features) const {
   LocalDOMWindow& window = GetWindow();
-  return std::all_of(features.begin(), features.end(),
-                     [&window](mojom::blink::PermissionsPolicyFeature feature) {
-                       return window.IsFeatureEnabled(
-                           feature, ReportOptions::kReportOnFailure);
-                     });
+  return std::ranges::all_of(
+      features, [&window](network::mojom::PermissionsPolicyFeature feature) {
+        return window.IsFeatureEnabled(feature,
+                                       ReportOptions::kReportOnFailure);
+      });
 }
 
 void DeviceSingleWindowEventController::Trace(Visitor* visitor) const {

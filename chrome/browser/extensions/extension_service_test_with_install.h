@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,15 +8,19 @@
 #include <stddef.h>
 
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/extensions/extension_service_test_base.h"
+#include "chrome/browser/extensions/extension_service_user_test_base.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace base {
 class FilePath;
@@ -28,9 +32,9 @@ class BrowserTaskEnvironment;
 
 namespace extensions {
 
-// An enhancement of ExtensionServiceTestBase that provides helpers to install,
-// update, and uninstall extensions.
-class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
+// An enhancement of ExtensionServiceUserTestBase that provides helpers to
+// install, update, and uninstall extensions.
+class ExtensionServiceTestWithInstall : public ExtensionServiceUserTestBase,
                                         public ExtensionRegistryObserver {
  public:
   ExtensionServiceTestWithInstall();
@@ -45,8 +49,7 @@ class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
   ~ExtensionServiceTestWithInstall() override;
 
  protected:
-  void InitializeExtensionService(
-      const ExtensionServiceInitParams& params) override;
+  void InitializeExtensionService(ExtensionServiceInitParams params) override;
 
   static std::vector<std::u16string> GetErrors();
 
@@ -91,16 +94,16 @@ class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
                                           InstallState install_state);
 
   // Verifies the result of a CRX installation. Used by InstallCRX. Set the
-  // |install_state| to INSTALL_FAILED if the installation is expected to fail.
+  // `install_state` to INSTALL_FAILED if the installation is expected to fail.
   // Returns an Extension pointer if the install succeeded, null otherwise.
   const Extension* VerifyCrxInstall(const base::FilePath& path,
                                     InstallState install_state);
 
   // Verifies the result of a CRX installation. Used by InstallCRX. Set the
-  // |install_state| to INSTALL_FAILED if the installation is expected to fail.
-  // If |install_state| is INSTALL_UPDATED, and |expected_old_name| is
+  // `install_state` to INSTALL_FAILED if the installation is expected to fail.
+  // If `install_state` is INSTALL_UPDATED, and `expected_old_name` is
   // non-empty, expects that the existing extension's title was
-  // |expected_old_name|.
+  // `expected_old_name`.
   // Returns an Extension pointer if the install succeeded, null otherwise.
   const Extension* VerifyCrxInstall(const base::FilePath& path,
                                     InstallState install_state,
@@ -124,7 +127,18 @@ class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
                        const base::FilePath& in_path,
                        UpdateState expected_state);
 
-  void UninstallExtension(const std::string& id);
+  enum UninstallExtensionFileDeleteType {
+    kDeletePath,         // Delete the exact path of the extension install.
+    kDeleteAllVersions,  // Delete all version of the extension (e.g. delete the
+                         // root of the install folder).
+    kDoNotDelete,        // Do not delete any of the extension's files.
+  };
+
+  // Uninstalls extension with `id` and expects deletion of the extension's
+  // files according to `delete_type`.
+  void UninstallExtension(
+      const std::string& id,
+      UninstallExtensionFileDeleteType delete_type = kDeleteAllVersions);
 
   void TerminateExtension(const std::string& id);
 
@@ -155,7 +169,7 @@ class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
                           int creation_flags);
 
   extensions::ExtensionList loaded_extensions_;
-  raw_ptr<const Extension> installed_extension_;
+  raw_ptr<const Extension, DanglingUntriaged> installed_extension_;
   bool was_update_;
   std::string old_name_;
   std::string unloaded_id_;

@@ -1,25 +1,37 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/child_process_launcher.h"
 
+#include <optional>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/i18n/icu_util.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/process/launch.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
+#include "base/types/expected.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
+#include "content/common/features.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/child_process_binding_types.h"
+#endif
 
 #if BUILDFLAG(IS_MAC)
 #include "content/browser/child_process_task_port_provider_mac.h"
@@ -27,10 +39,30 @@
 
 namespace content {
 
+namespace {
+
+#if !BUILDFLAG(IS_ANDROID)
+// Returns the cumulative CPU usage for the specified process.
+std::optional<base::TimeDelta> GetCPUUsage(base::ProcessHandle process_handle) {
+#if BUILDFLAG(IS_MAC)
+  std::unique_ptr<base::ProcessMetrics> process_metrics =
+      base::ProcessMetrics::CreateProcessMetrics(
+          process_handle, ChildProcessTaskPortProvider::GetInstance());
+#else
+  std::unique_ptr<base::ProcessMetrics> process_metrics =
+      base::ProcessMetrics::CreateProcessMetrics(process_handle);
+#endif
+  return base::OptionalFromExpected(process_metrics->GetCumulativeCPUUsage());
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+}  // namespace
+
 using internal::ChildProcessLauncherHelper;
 
-void ChildProcessLauncherPriority::WriteIntoTrace(
+void RenderProcessPriority::WriteIntoTrace(
     perfetto::TracedProto<TraceProto> proto) const {
+  // TODO(pmonette): Migrate is_background() to GetProcessPriority().
   proto->set_is_backgrounded(is_background());
   proto->set_has_pending_views(boost_for_pending_views);
 
@@ -45,6 +77,9 @@ void ChildProcessLauncherPriority::WriteIntoTrace(
       break;
     case ChildProcessImportance::MODERATE:
       proto->set_importance(PriorityProto::IMPORTANCE_MODERATE);
+      break;
+    case ChildProcessImportance::PERCEPTIBLE:
+      proto->set_importance(PriorityProto::IMPORTANCE_PERCEPTIBLE);
       break;
   }
 #endif
@@ -68,6 +103,12 @@ ChildProcessLauncher::ChildProcessLauncher(
     mojo::OutgoingInvitation mojo_invitation,
     const mojo::ProcessErrorCallback& process_error_callback,
     std::unique_ptr<ChildProcessLauncherFileData> file_data,
+    scoped_refptr<base::RefCountedData<base::UnsafeSharedMemoryRegion>>
+        histogram_memory_region,
+    scoped_refptr<base::RefCountedData<base::ReadOnlySharedMemoryRegion>>
+        tracing_config_memory_region,
+    scoped_refptr<base::RefCountedData<base::UnsafeSharedMemoryRegion>>
+        tracing_output_memory_region,
     bool terminate_on_shutdown)
     : client_(client),
       starting_(true),
@@ -79,7 +120,12 @@ ChildProcessLauncher::ChildProcessLauncher(
       terminate_child_on_shutdown_(terminate_on_shutdown)
 #endif
 {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("startup", "ChildProcessLauncher", this);
+
+#if BUILDFLAG(IS_WIN)
+  should_launch_elevated_ = delegate->ShouldLaunchElevated();
+#endif
 
   helper_ = base::MakeRefCounted<ChildProcessLauncherHelper>(
       child_process_id, std::move(command_line), std::move(delegate),
@@ -87,12 +133,15 @@ ChildProcessLauncher::ChildProcessLauncher(
 #if BUILDFLAG(IS_ANDROID)
       client_->CanUseWarmUpConnection(),
 #endif
-      std::move(mojo_invitation), process_error_callback, std::move(file_data));
+      std::move(mojo_invitation), process_error_callback, std::move(file_data),
+      std::move(histogram_memory_region),
+      std::move(tracing_config_memory_region),
+      std::move(tracing_output_memory_region));
   helper_->StartLaunchOnClientThread();
 }
 
 ChildProcessLauncher::~ChildProcessLauncher() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (process_.process.IsValid() && terminate_child_on_shutdown_) {
     // Client has gone away, so just kill the process.
     ChildProcessLauncherHelper::ForceNormalProcessTerminationAsync(
@@ -100,28 +149,57 @@ ChildProcessLauncher::~ChildProcessLauncher() {
   }
 }
 
-void ChildProcessLauncher::SetProcessPriority(
-    const ChildProcessLauncherPriority& priority) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+#if BUILDFLAG(IS_ANDROID)
+void ChildProcessLauncher::SetRenderProcessPriority(
+    const RenderProcessPriority& priority) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Process to_pass = process_.process.Duplicate();
   GetProcessLauncherTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread,
+          &ChildProcessLauncherHelper::SetRenderProcessPriorityOnLauncherThread,
           helper_, std::move(to_pass), priority));
 }
+#else   // !BUILDFLAG(IS_ANDROID)
+void ChildProcessLauncher::SetProcessPriority(
+    base::Process::Priority priority) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (priority == priority_) {
+    return;
+  }
+
+  SetProcessPriorityImpl(priority);
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 void ChildProcessLauncher::Notify(ChildProcessLauncherHelper::Process process,
 #if BUILDFLAG(IS_WIN)
                                   DWORD last_error,
 #endif
                                   int error_code) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("startup", "ChildProcessLauncher", this);
+
   starting_ = false;
   process_ = std::move(process);
 
   if (process_.process.IsValid()) {
     process_start_time_ = base::TimeTicks::Now();
+
+#if BUILDFLAG(IS_MAC)
+    // On mac, the task port is required to change the priority of the child
+    // process.
+    auto* port_provider = ChildProcessTaskPortProvider::GetInstance();
+    CHECK(port_provider);
+    if (port_provider->TaskForHandle(process_.process.Handle()) ==
+        MACH_PORT_NULL) {
+      // In the most common case, the task port is not available at launch time.
+      scoped_port_provider_observation_.Observe(port_provider);
+    }
+#endif
+
+    // Note:: May delete |this|.
     client_->OnProcessLaunched();
   } else {
     termination_info_.status = base::TERMINATION_STATUS_LAUNCH_FAILED;
@@ -135,20 +213,55 @@ void ChildProcessLauncher::Notify(ChildProcessLauncherHelper::Process process,
   }
 }
 
+#if BUILDFLAG(IS_MAC)
+void ChildProcessLauncher::OnReceivedTaskPort(
+    base::ProcessHandle process_handle) {
+  if (!process_.process.IsValid()) {
+    // The process has died since. No need to keep observing for task ports.
+    scoped_port_provider_observation_.Reset();
+    return;
+  }
+
+  // Ignore notifications about different processes.
+  if (process_.process.Handle() != process_handle) {
+    return;
+  }
+
+  scoped_port_provider_observation_.Reset();
+
+  if (priority_) {
+    SetProcessPriorityImpl(*priority_);
+  }
+}
+#endif
+
+#if !BUILDFLAG(IS_ANDROID)
+void ChildProcessLauncher::SetProcessPriorityImpl(
+    base::Process::Priority priority) {
+  priority_ = priority;
+  base::Process to_pass = process_.process.Duplicate();
+  GetProcessLauncherTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread,
+          helper_, std::move(to_pass), priority));
+}
+#endif
+
 bool ChildProcessLauncher::IsStarting() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return starting_;
 }
 
 const base::Process& ChildProcessLauncher::GetProcess() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!starting_);
   return process_.process;
 }
 
 ChildProcessTerminationInfo ChildProcessLauncher::GetChildTerminationInfo(
     bool known_dead) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!process_.process.IsValid()) {
     // Make sure to avoid using the default termination status if the process
@@ -160,7 +273,20 @@ ChildProcessTerminationInfo ChildProcessLauncher::GetChildTerminationInfo(
     return termination_info_;
   }
 
+#if !BUILDFLAG(IS_ANDROID)
+  std::optional<base::TimeDelta> cpu_usage;
+  if (!should_launch_elevated_)
+    cpu_usage = GetCPUUsage(process_.process.Handle());
+#endif
+
   termination_info_ = helper_->GetTerminationInfo(process_, known_dead);
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Get the cumulative CPU usage. This needs to be done before closing the
+  // process handle (on Windows) or reaping the zombie process (on MacOS, Linux,
+  // ChromeOS).
+  termination_info_.cpu_usage = cpu_usage;
+#endif
 
   // POSIX: If the process crashed, then the kernel closed the socket for it and
   // so the child has already died by the time we get here. Since
@@ -189,6 +315,11 @@ bool ChildProcessLauncher::TerminateProcess(const base::Process& process,
 }
 
 #if BUILDFLAG(IS_ANDROID)
+base::android::ChildBindingState
+ChildProcessLauncher::GetEffectiveChildBindingState() {
+  return helper_->GetEffectiveChildBindingState();
+}
+
 void ChildProcessLauncher::DumpProcessStack() {
   base::Process to_pass = process_.process.Duplicate();
   GetProcessLauncherTaskRunner()->PostTask(
@@ -204,23 +335,95 @@ ChildProcessLauncher::Client* ChildProcessLauncher::ReplaceClientForTest(
   return ret;
 }
 
-bool ChildProcessLauncherPriority::is_background() const {
-  return !visible && !has_media_stream && !boost_for_pending_views &&
-         !has_foreground_service_worker;
+RenderProcessPriority::RenderProcessPriority(
+    bool visible,
+    bool has_media_stream,
+    bool has_immersive_xr_session,
+    bool has_foreground_service_worker,
+    unsigned int frame_depth,
+    bool intersects_viewport,
+    bool boost_for_pending_views,
+    bool boost_for_loading,
+    bool boost_for_discard,
+    bool is_spare_renderer
+#if BUILDFLAG(IS_ANDROID)
+    ,
+    ChildProcessImportance importance
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+    ,
+    std::optional<base::Process::Priority> priority_override
+#endif
+    )
+    : visible(visible),
+      has_media_stream(has_media_stream),
+      has_immersive_xr_session(has_immersive_xr_session),
+      has_foreground_service_worker(has_foreground_service_worker),
+      frame_depth(frame_depth),
+      intersects_viewport(intersects_viewport),
+      boost_for_pending_views(boost_for_pending_views),
+      boost_for_loading(boost_for_loading),
+      boost_for_discard(boost_for_discard),
+      is_spare_renderer(is_spare_renderer)
+#if BUILDFLAG(IS_ANDROID)
+      ,
+      importance(importance)
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+      ,
+      priority_override(priority_override)
+#endif
+{
 }
 
-bool ChildProcessLauncherPriority::operator==(
-    const ChildProcessLauncherPriority& other) const {
-  return visible == other.visible &&
-         has_media_stream == other.has_media_stream &&
-         has_foreground_service_worker == other.has_foreground_service_worker &&
-         frame_depth == other.frame_depth &&
-         intersects_viewport == other.intersects_viewport &&
-         boost_for_pending_views == other.boost_for_pending_views
-#if BUILDFLAG(IS_ANDROID)
-         && importance == other.importance
+RenderProcessPriority::RenderProcessPriority(const RenderProcessPriority&) =
+    default;
+
+RenderProcessPriority& RenderProcessPriority::operator=(
+    const RenderProcessPriority&) = default;
+
+bool RenderProcessPriority::is_background() const {
+#if !BUILDFLAG(IS_ANDROID)
+  if (priority_override) {
+    // TODO(pmonette): Migrate this logic to the performance manager's voting
+    // system if it has a positive impact.
+    if (base::FeatureList::IsEnabled(features::kPriorityOverridePendingViews) &&
+        boost_for_pending_views) {
+      return false;
+    }
+    // TODO(351953350): Migrate this logic to the performance manager.
+    if (boost_for_loading || boost_for_discard) {
+      return false;
+    }
+    return *priority_override == base::Process::Priority::kBestEffort;
+  }
 #endif
-      ;
+  return !visible && !has_media_stream && !has_immersive_xr_session &&
+         !boost_for_pending_views && !has_foreground_service_worker &&
+         !boost_for_loading && !boost_for_discard;
 }
+
+base::Process::Priority RenderProcessPriority::GetProcessPriority() const {
+#if !BUILDFLAG(IS_ANDROID)
+  if (priority_override) {
+    // TODO(pmonette): Migrate this logic to the performance manager's voting
+    // system if it has a positive impact.
+    if (base::FeatureList::IsEnabled(features::kPriorityOverridePendingViews) &&
+        boost_for_pending_views) {
+      return base::Process::Priority::kUserBlocking;
+    }
+    // TODO(351953350): Migrate this logic to the performance manager.
+    if (boost_for_loading || boost_for_discard) {
+      return base::Process::Priority::kUserBlocking;
+    }
+    return *priority_override;
+  }
+#endif
+  return is_background() ? base::Process::Priority::kBestEffort
+                         : base::Process::Priority::kUserBlocking;
+}
+
+bool RenderProcessPriority::operator==(
+    const RenderProcessPriority& other) const = default;
 
 }  // namespace content

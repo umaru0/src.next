@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,13 @@
 #define CHROME_BROWSER_EXTENSIONS_CHROME_EXTENSION_FRAME_HOST_H_
 
 #include "extensions/browser/extension_frame_host.h"
+#include "extensions/buildflags/buildflags.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/frame.mojom.h"
 #include "extensions/common/mojom/injection_type.mojom-shared.h"
 #include "extensions/common/mojom/run_location.mojom-shared.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace content {
 class WebContents;
@@ -27,7 +31,7 @@ class ChromeExtensionFrameHost : public ExtensionFrameHost {
 
   // mojom::LocalFrameHost:
   void RequestScriptInjectionPermission(
-      const std::string& extension_id,
+      const ExtensionId& extension_id,
       mojom::InjectionType script_type,
       mojom::RunLocation run_location,
       RequestScriptInjectionPermissionCallback callback) override;
@@ -35,6 +39,15 @@ class ChromeExtensionFrameHost : public ExtensionFrameHost {
                           GetAppInstallStateCallback callback) override;
   void WatchedPageChange(
       const std::vector<std::string>& css_selectors) override;
+  void DetailedConsoleMessageAdded(
+      const std::u16string& message,
+      const std::u16string& source,
+      const StackTrace& stack_trace,
+      blink::mojom::ConsoleMessageLevel level) override;
+  void ContentScriptsExecuting(
+      const base::flat_map<ExtensionId, std::vector<std::string>>&
+          extension_id_to_scripts,
+      const GURL& frame_url) override;
 };
 
 }  // namespace extensions

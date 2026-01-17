@@ -32,9 +32,11 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/frame/cached_permission_status.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace display {
 struct ScreenInfo;
@@ -44,13 +46,14 @@ namespace blink {
 
 class LocalDOMWindow;
 
-class CORE_EXPORT Screen : public EventTargetWithInlineData,
+class CORE_EXPORT Screen : public EventTarget,
                            public ExecutionContextClient,
+                           public CachedPermissionStatus::Client,
                            public Supplementable<Screen> {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  explicit Screen(LocalDOMWindow*, int64_t display_id);
+  Screen(LocalDOMWindow*, int64_t display_id);
 
   static bool AreWebExposedScreenPropertiesEqual(
       const display::ScreenInfo& prev,
@@ -67,14 +70,19 @@ class CORE_EXPORT Screen : public EventTargetWithInlineData,
 
   void Trace(Visitor*) const override;
 
-  // EventTargetWithInlineData:
-  const WTF::AtomicString& InterfaceName() const override;
+  // EventTarget:
+  const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  // Proposed: https://github.com/webscreens/window-placement
-  // Whether this Screen is part of a multi-screen extended visual workspace.
+  // True if information about the device's screen size should be reduced in
+  // this context.
+  bool ShouldReduceScreenSize() const;
+
+  // Whether the device’s visual output extends over multiple screens.
+  // https://w3c.github.io/window-management/
   bool isExtended() const;
-  // An event fired when Screen attributes change.
+  // Fired when the window’s screen or that screen's attributes change.
+  // https://w3c.github.io/window-management/
   DEFINE_ATTRIBUTE_EVENT_LISTENER(change, kChange)
 
   // Not web-exposed; for internal usage only.
@@ -83,8 +91,22 @@ class CORE_EXPORT Screen : public EventTargetWithInlineData,
   void UpdateDisplayId(int64_t display_id) { display_id_ = display_id; }
 
  protected:
+  // Helpers to access screen information.
+  gfx::Rect GetRect(bool available) const;
   const display::ScreenInfo& GetScreenInfo() const;
+
+  // CachedPermissionStatus::Client overrides:
+  void OnPermissionStatusChange(mojom::blink::PermissionName,
+                                mojom::blink::PermissionStatus) override;
+
+  void OnPermissionStatusInitialized(
+      CachedPermissionStatus::PermissionStatusMap) override;
+
+  // The internal id of the underlying display, to support multi-screen devices.
   int64_t display_id_;
+
+ private:
+  bool window_management_permission_granted_ = false;
 };
 
 }  // namespace blink

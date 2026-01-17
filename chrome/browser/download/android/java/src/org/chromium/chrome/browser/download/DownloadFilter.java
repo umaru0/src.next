@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,9 @@ import android.text.TextUtils;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Locale;
@@ -16,6 +19,7 @@ import java.util.Locale;
  * A class holding constants and convenience methods about filters and their corresponding
  * resources.
  */
+@NullMarked
 public class DownloadFilter {
     // These statics are used for UMA logging. Please update the AndroidDownloadFilterType enum in
     // histograms.xml if these change.
@@ -38,7 +42,7 @@ public class DownloadFilter {
     private static final String MIMETYPE_DOCUMENT = "text";
 
     /** Identifies the type of file represented by the given MIME type string. */
-    public static @Type int fromMimeType(String mimeType) {
+    public static @Type int fromMimeType(@Nullable String mimeType) {
         if (TextUtils.isEmpty(mimeType)) return Type.OTHER;
 
         Integer type = filterForSpecialMimeTypes(mimeType);
@@ -60,7 +64,7 @@ public class DownloadFilter {
         }
     }
 
-    private static Integer filterForSpecialMimeTypes(String mimeType) {
+    private static @Nullable Integer filterForSpecialMimeTypes(String mimeType) {
         if (mimeType.equals("application/ogg")) return Type.AUDIO;
         return null;
     }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,12 +7,20 @@
 
 #include <memory>
 
+#include "build/build_config.h"
+
 class Browser;
+class BrowserWindowInterface;
 class GURL;
 class Profile;
 
+namespace tabs {
+class TabInterface;
+}
+
 namespace extensions {
 
+class Extension;
 class ExtensionViewHost;
 
 // A utility class to make ExtensionViewHosts for UI views that are backed
@@ -22,16 +30,28 @@ class ExtensionViewHostFactory {
   ExtensionViewHostFactory(const ExtensionViewHostFactory&) = delete;
   ExtensionViewHostFactory& operator=(const ExtensionViewHostFactory&) = delete;
 
+#if BUILDFLAG(IS_ANDROID)
+  // Creates a new ExtensionHost with its associated view, grouping it in the
+  // appropriate SiteInstance (and therefore process) based on the URL and
+  // profile.
+  static std::unique_ptr<ExtensionViewHost> CreatePopupHost(const GURL& url,
+                                                            Profile* profile);
+#else   // BUILDFLAG(IS_ANDROID)
   // Creates a new ExtensionHost with its associated view, grouping it in the
   // appropriate SiteInstance (and therefore process) based on the URL and
   // profile.
   static std::unique_ptr<ExtensionViewHost> CreatePopupHost(const GURL& url,
                                                             Browser* browser);
 
-  // Some dialogs may not be associated with a particular browser window and
-  // hence only require a |profile|.
-  static std::unique_ptr<ExtensionViewHost> CreateDialogHost(const GURL& url,
-                                                             Profile* profile);
+  // Creates a new ExtensionHost with its associated view, grouping it in the
+  // appropriate SiteInstance (and therefore process) based on the URL and
+  // profile.
+  static std::unique_ptr<ExtensionViewHost> CreateSidePanelHost(
+      const Extension& extension,
+      const GURL& url,
+      BrowserWindowInterface* browser,
+      tabs::TabInterface* tab_interface);
+#endif  // BUILDFLAG(IS_ANDROID)
 };
 
 }  // namespace extensions

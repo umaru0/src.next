@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
@@ -43,7 +43,7 @@ class NET_EXPORT UploadFileElementReader : public UploadElementReader {
                           const base::FilePath& path,
                           uint64_t range_offset,
                           uint64_t range_length,
-                          const base::Time& expected_modification_time);
+                          base::Time expected_modification_time);
 
   // Same a above, but takes a FilePath instead.
   // TODO(mmenke): Remove if all consumers can be switched to the first
@@ -52,7 +52,7 @@ class NET_EXPORT UploadFileElementReader : public UploadElementReader {
                           const base::FilePath& path,
                           uint64_t range_offset,
                           uint64_t range_length,
-                          const base::Time& expected_modification_time);
+                          base::Time expected_modification_time);
 
   UploadFileElementReader(const UploadFileElementReader&) = delete;
   UploadFileElementReader& operator=(const UploadFileElementReader&) = delete;
@@ -61,7 +61,7 @@ class NET_EXPORT UploadFileElementReader : public UploadElementReader {
   const base::FilePath& path() const { return path_; }
   uint64_t range_offset() const { return range_offset_; }
   uint64_t range_length() const { return range_length_; }
-  const base::Time& expected_modification_time() const {
+  base::Time expected_modification_time() const {
     return expected_modification_time_;
   }
 

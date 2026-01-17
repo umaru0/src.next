@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,13 +7,11 @@
 
 #include <list>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "content/common/content_export.h"
-
 #include "build/build_config.h"
-
+#include "content/common/content_export.h"
 #include "content/public/browser/browser_main_runner.h"
 
 namespace content {
@@ -37,9 +35,11 @@ class CONTENT_EXPORT StartupTaskRunner {
 
  public:
   // Constructor: Note that |startup_complete_callback| is optional. If it is
-  // not null it will be called once all the startup tasks have run.
-  StartupTaskRunner(base::OnceCallback<void(int)> startup_complete_callback,
-                    scoped_refptr<base::SingleThreadTaskRunner> proxy);
+  // not null it will be called, once all the startup tasks have run, with the
+  // result of running tasks and the duration spent blocking the UI thread.
+  StartupTaskRunner(
+      base::OnceCallback<void(int, base::TimeDelta)> startup_complete_callback,
+      scoped_refptr<base::SingleThreadTaskRunner> proxy);
 
   StartupTaskRunner(const StartupTaskRunner&) = delete;
   StartupTaskRunner& operator=(const StartupTaskRunner&) = delete;
@@ -61,11 +61,12 @@ class CONTENT_EXPORT StartupTaskRunner {
   std::list<StartupTask> task_list_;
   void WrappedTask();
 
-  base::OnceCallback<void(int)> startup_complete_callback_;
-  // Stores the time that the last post of a WrappedTask occurred. Used for
-  // gathering metrics.
-  base::TimeTicks last_wrapped_task_post_time_;
+  base::OnceCallback<void(int, base::TimeDelta)> startup_complete_callback_;
   scoped_refptr<base::SingleThreadTaskRunner> proxy_;
+  // Longest time spent blocking the thread when running the tasks. This is
+  // either the max duration of each individual task when running async or the
+  // time it took to run all tasks synchronously.
+  base::TimeDelta longest_blocking_duration_;
 };
 
 }  // namespace content

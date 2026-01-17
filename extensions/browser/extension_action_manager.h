@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,8 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/api/extension_action/action_info.h"
+
+class BrowserContextKeyedServiceFactory;
 
 namespace content {
 class BrowserContext;
@@ -33,7 +35,7 @@ class ExtensionActionManager : public KeyedService,
   explicit ExtensionActionManager(content::BrowserContext* browser_context);
   ~ExtensionActionManager() override;
 
-  // Returns this |browser_context|'s ExtensionActionManager. One instance is
+  // Returns this `browser_context`'s ExtensionActionManager. One instance is
   // shared between a BrowserContext and its off-the-record version.
   static ExtensionActionManager* Get(content::BrowserContext* browser_context);
 
@@ -43,6 +45,9 @@ class ExtensionActionManager : public KeyedService,
   // anywhere callers simply need to get at the action and don't care about
   // the manifest key.
   ExtensionAction* GetExtensionAction(const Extension& extension) const;
+
+  // Retrieves the factory instance for the ExtensionActionManager.
+  static BrowserContextKeyedServiceFactory* GetFactory();
 
  private:
   // Implement ExtensionRegistryObserver.

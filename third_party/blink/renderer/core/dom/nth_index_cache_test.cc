@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@ namespace blink {
 class NthIndexCacheTest : public PageTestBase {};
 
 TEST_F(NthIndexCacheTest, NthIndex) {
-  GetDocument().documentElement()->setInnerHTML(R"HTML(
+  GetDocument().documentElement()->SetInnerHTMLWithoutTrustedTypes(R"HTML(
     <body>
     <span
     id=first></span><span></span><span></span><span></span><span></span>
@@ -31,10 +31,14 @@ TEST_F(NthIndexCacheTest, NthIndex) {
 
   NthIndexCache nth_index_cache(GetDocument());
 
-  EXPECT_EQ(nth_index_cache.NthChildIndex(*GetElementById("nth-child")), 12U);
-  EXPECT_EQ(
-      nth_index_cache.NthLastChildIndex(*GetElementById("nth-last-child")),
-      12U);
+  EXPECT_EQ(nth_index_cache.NthChildIndex(
+                *GetElementById("nth-child"), /*filter=*/nullptr,
+                /*selector_checker=*/nullptr, /*context=*/nullptr),
+            12U);
+  EXPECT_EQ(nth_index_cache.NthLastChildIndex(
+                *GetElementById("nth-last-child"), /*filter=*/nullptr,
+                /*selector_checker=*/nullptr, /*context=*/nullptr),
+            12U);
 }
 
 }  // namespace blink

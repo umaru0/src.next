@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,26 +6,35 @@
 
 #include <utility>
 
-#include "base/callback.h"
-#include "base/notreached.h"
+#include "base/functional/callback.h"
+#include "base/notimplemented.h"
 
 namespace chrome {
 
-MessageBoxResult ShowWarningMessageBox(gfx::NativeWindow parent,
-                                       const std::u16string& title,
-                                       const std::u16string& message) {
+void ShowWarningMessageBoxAsync(
+    gfx::NativeWindow parent,
+    const std::u16string& title,
+    const std::u16string& message,
+    base::OnceCallback<void(MessageBoxResult)> callback) {
+  NOTIMPLEMENTED();
+  std::move(callback).Run(MESSAGE_BOX_RESULT_NO);
+}
+
+MessageBoxResult ShowWarningMessageBoxSync(gfx::NativeWindow parent,
+                                           const std::u16string& title,
+                                           const std::u16string& message) {
   NOTIMPLEMENTED();
   return MESSAGE_BOX_RESULT_NO;
 }
 
-MessageBoxResult ShowQuestionMessageBox(gfx::NativeWindow parent,
-                                        const std::u16string& title,
-                                        const std::u16string& message) {
+MessageBoxResult ShowQuestionMessageBoxSync(gfx::NativeWindow parent,
+                                            const std::u16string& title,
+                                            const std::u16string& message) {
   NOTIMPLEMENTED();
   return MESSAGE_BOX_RESULT_NO;
 }
 
-void ShowWarningMessageBoxWithCheckbox(
+void ShowWarningMessageBoxWithCheckboxAsync(
     gfx::NativeWindow parent,
     const std::u16string& title,
     const std::u16string& message,

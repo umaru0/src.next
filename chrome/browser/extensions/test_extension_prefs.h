@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,15 +9,18 @@
 #include <string>
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/values.h"
 #include "chrome/test/base/testing_profile.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 class ExtensionPrefValueMap;
 class PrefService;
 
 namespace base {
-class DictionaryValue;
 class SequencedTaskRunner;
 }
 
@@ -76,13 +79,13 @@ class TestExtensionPrefs {
 
   // Similar to AddExtension, but takes a dictionary with manifest values.
   scoped_refptr<Extension> AddExtensionWithManifest(
-      const base::DictionaryValue& manifest,
+      const base::Value::Dict& manifest,
       mojom::ManifestLocation location);
 
   // Similar to AddExtension, but takes a dictionary with manifest values
   // and extension flags.
   scoped_refptr<Extension> AddExtensionWithManifestAndFlags(
-      const base::DictionaryValue& manifest,
+      const base::Value::Dict& manifest,
       mojom::ManifestLocation location,
       int extra_flags);
 
@@ -103,7 +106,7 @@ class TestExtensionPrefs {
   ChromeAppSorting* app_sorting();
 
   static void AddDefaultManifestKeys(const std::string& name,
-                                     base::DictionaryValue* dict);
+                                     base::Value::Dict& dict);
 
  protected:
   class IncrementalClock;
@@ -117,8 +120,8 @@ class TestExtensionPrefs {
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
  private:
-  // |clock_| is injected to an ExtensionPrefs that associated to |profile_|.
-  // Put |clock_| above |profile_| to outlive it.
+  // `clock_` is injected to an ExtensionPrefs that associated to `profile_`.
+  // Put `clock_` above `profile_` to outlive it.
   std::unique_ptr<IncrementalClock> clock_;
   TestingProfile profile_;
   bool extensions_disabled_;

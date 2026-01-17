@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,11 +33,7 @@
 #endif  // defined(COMPILER_MSVC)
 
 #if defined(COMPILER_GCC)
-#if BLINK_CORE_IMPLEMENTATION
 #define CORE_EXPORT __attribute__((visibility("default")))
-#else
-#define CORE_EXPORT
-#endif
 #endif  // defined(COMPILER_GCC)
 
 #endif  // !defined(COMPONENT_BUILD)

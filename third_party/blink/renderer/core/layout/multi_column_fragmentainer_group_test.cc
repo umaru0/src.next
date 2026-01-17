@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,15 +9,19 @@
 #include "third_party/blink/renderer/core/layout/layout_multi_column_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_set.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
 namespace {
 
-class MultiColumnFragmentainerGroupTest : public RenderingTest {
+class MultiColumnFragmentainerGroupTest : public RenderingTest,
+                                          public ScopedFlowThreadLessForTest {
  public:
   MultiColumnFragmentainerGroupTest()
-      : flow_thread_(nullptr), column_set_(nullptr) {}
+      : ScopedFlowThreadLessForTest(false),
+        flow_thread_(nullptr),
+        column_set_(nullptr) {}
 
  protected:
   void SetUp() override;
@@ -34,10 +38,9 @@ class MultiColumnFragmentainerGroupTest : public RenderingTest {
 
 void MultiColumnFragmentainerGroupTest::SetUp() {
   RenderingTest::SetUp();
-  scoped_refptr<ComputedStyle> style =
-      GetDocument().GetStyleResolver().CreateComputedStyle();
-  flow_thread_ = LayoutMultiColumnFlowThread::CreateAnonymous(
-      GetDocument(), *style.get(), /* needs_paint_layer */ true);
+  const ComputedStyle& style = GetDocument().GetStyleResolver().InitialStyle();
+  flow_thread_ =
+      LayoutMultiColumnFlowThread::CreateAnonymous(GetDocument(), style);
   column_set_ = LayoutMultiColumnSet::CreateAnonymous(*flow_thread_,
                                                       *flow_thread_->Style());
 }
@@ -97,99 +100,6 @@ TEST_F(MultiColumnFragmentainerGroupTest,
   EXPECT_EQ(GroupCount(group_list), 4);
   group_list.DeleteExtraGroups();
   EXPECT_EQ(GroupCount(group_list), 1);
-}
-
-// The following test tests that we DON'T restrict actual column count, when
-// there's a legitimate reason to use many columns. The code that checks the
-// allowance and potentially applies this limitation is in
-// MultiColumnFragmentainerGroup::ActualColumnCount().
-TEST_F(MultiColumnFragmentainerGroupTest, LotsOfContent) {
-  StringBuilder builder;
-  builder.Append(
-      "<div id='multicol' style='columns:3; column-gap:1px; width:101px; "
-      "line-height:50px; orphans:1; widows:1; height:60px;'>");
-  for (int i = 0; i < 100; i++)
-    builder.Append("line<br>");
-  builder.Append("</div>");
-  String html;
-  SetBodyInnerHTML(builder.ToString());
-  const auto* multicol = GetLayoutObjectByElementId("multicol");
-  ASSERT_TRUE(multicol);
-  ASSERT_TRUE(multicol->IsLayoutBlockFlow());
-  const auto* column_set = multicol->SlowLastChild();
-  ASSERT_TRUE(column_set);
-  ASSERT_TRUE(column_set->IsLayoutMultiColumnSet());
-  const auto& fragmentainer_group =
-      To<LayoutMultiColumnSet>(column_set)->FirstFragmentainerGroup();
-  EXPECT_EQ(fragmentainer_group.ActualColumnCount(), 100U);
-  EXPECT_EQ(fragmentainer_group.GroupLogicalHeight(), LayoutUnit(60));
-  auto overflow = To<LayoutBox>(multicol)->LayoutOverflowRect();
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalWidth(), LayoutUnit(101));
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalHeight(), LayoutUnit(60));
-  EXPECT_EQ(overflow.Width(), LayoutUnit(3399));
-  EXPECT_EQ(overflow.Height(), LayoutUnit(60));
-}
-
-// The following test tests that we DON'T restrict actual column count, when
-// there's a legitimate reason to use many columns. The code that checks the
-// allowance and potentially applies this limitation is in
-// MultiColumnFragmentainerGroup::ActualColumnCount().
-TEST_F(MultiColumnFragmentainerGroupTest, LotsOfNestedBlocksWithText) {
-  StringBuilder builder;
-  builder.Append(
-      "<div id='multicol' style='columns:3; column-gap:1px; width:101px; "
-      "line-height:50px; height:200px;'>");
-  for (int i = 0; i < 1000; i++)
-    builder.Append("<div><div><div>line</div></div></div>");
-  builder.Append("</div>");
-  String html;
-  SetBodyInnerHTML(builder.ToString());
-  const auto* multicol = GetLayoutObjectByElementId("multicol");
-  ASSERT_TRUE(multicol);
-  ASSERT_TRUE(multicol->IsLayoutBlockFlow());
-  const auto* column_set = multicol->SlowLastChild();
-  ASSERT_TRUE(column_set);
-  ASSERT_TRUE(column_set->IsLayoutMultiColumnSet());
-  const auto& fragmentainer_group =
-      To<LayoutMultiColumnSet>(column_set)->FirstFragmentainerGroup();
-  EXPECT_EQ(fragmentainer_group.ActualColumnCount(), 250U);
-  EXPECT_EQ(fragmentainer_group.GroupLogicalHeight(), LayoutUnit(200));
-  auto overflow = To<LayoutBox>(multicol)->LayoutOverflowRect();
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalWidth(), LayoutUnit(101));
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalHeight(), LayoutUnit(200));
-  EXPECT_EQ(overflow.Width(), LayoutUnit(8499));
-  EXPECT_EQ(overflow.Height(), LayoutUnit(200));
-}
-
-// The following test tests that we DON'T restrict actual column count, when
-// there's a legitimate reason to use many columns. The code that checks the
-// allowance and potentially applies this limitation is in
-// MultiColumnFragmentainerGroup::ActualColumnCount().
-TEST_F(MultiColumnFragmentainerGroupTest, NestedBlocksWithLotsOfContent) {
-  StringBuilder builder;
-  builder.Append(
-      "<div id='multicol' style='columns:3; column-gap:1px; width:101px; "
-      "line-height:50px; orphans:1; widows:1; height:60px;'><div><div><div>");
-  for (int i = 0; i < 100; i++)
-    builder.Append("line<br>");
-  builder.Append("</div></div></div></div>");
-  String html;
-  SetBodyInnerHTML(builder.ToString());
-  const auto* multicol = GetLayoutObjectByElementId("multicol");
-  ASSERT_TRUE(multicol);
-  ASSERT_TRUE(multicol->IsLayoutBlockFlow());
-  const auto* column_set = multicol->SlowLastChild();
-  ASSERT_TRUE(column_set);
-  ASSERT_TRUE(column_set->IsLayoutMultiColumnSet());
-  const auto& fragmentainer_group =
-      To<LayoutMultiColumnSet>(column_set)->FirstFragmentainerGroup();
-  EXPECT_EQ(fragmentainer_group.ActualColumnCount(), 100U);
-  EXPECT_EQ(fragmentainer_group.GroupLogicalHeight(), LayoutUnit(60));
-  auto overflow = To<LayoutBox>(multicol)->LayoutOverflowRect();
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalWidth(), LayoutUnit(101));
-  EXPECT_EQ(To<LayoutBox>(multicol)->LogicalHeight(), LayoutUnit(60));
-  EXPECT_EQ(overflow.Width(), LayoutUnit(3399));
-  EXPECT_EQ(overflow.Height(), LayoutUnit(60));
 }
 
 }  // anonymous namespace

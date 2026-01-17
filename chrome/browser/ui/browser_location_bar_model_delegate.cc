@@ -1,19 +1,19 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/browser_location_bar_model_delegate.h"
 
-#include "chrome/browser/ui/browser.h"
+#include "base/check_deref.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 
 BrowserLocationBarModelDelegate::BrowserLocationBarModelDelegate(
-    Browser* browser)
-    : browser_(browser) {}
+    TabStripModel* tab_strip_model)
+    : tab_strip_model_(CHECK_DEREF(tab_strip_model)) {}
 
-BrowserLocationBarModelDelegate::~BrowserLocationBarModelDelegate() {}
+BrowserLocationBarModelDelegate::~BrowserLocationBarModelDelegate() = default;
 
 content::WebContents* BrowserLocationBarModelDelegate::GetActiveWebContents()
     const {
-  return browser_->tab_strip_model()->GetActiveWebContents();
+  return tab_strip_model_->GetActiveWebContents();
 }

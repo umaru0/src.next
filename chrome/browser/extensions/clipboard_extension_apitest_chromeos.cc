@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 
 using ClipboardExtensionApiTest = extensions::ExtensionApiTest;
 
-#if BUILDFLAG(IS_CHROMEOS)
 // Disable due to flaky, https://crbug.com/1206809
 IN_PROC_BROWSER_TEST_F(ClipboardExtensionApiTest,
                        DISABLED_ClipboardDataChanged) {
@@ -28,5 +27,3 @@ IN_PROC_BROWSER_TEST_F(ClipboardExtensionApiTest, SetImageData) {
       << message_;
   ASSERT_TRUE(clipboard_change_listener.WaitUntilSatisfied());
 }
-
-#endif  // BUILDFLAG(IS_CHROMEOS)

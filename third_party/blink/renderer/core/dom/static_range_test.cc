@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,10 @@
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
+#include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
@@ -28,11 +30,14 @@ class StaticRangeTest : public testing::Test {
   HTMLDocument& GetDocument() const;
 
  private:
+  test::TaskEnvironment task_environment_;
+  ScopedNullExecutionContext execution_context_;
   Persistent<HTMLDocument> document_;
 };
 
 void StaticRangeTest::SetUp() {
-  document_ = HTMLDocument::CreateForTest();
+  document_ =
+      HTMLDocument::CreateForTest(execution_context_.GetExecutionContext());
   auto* html = MakeGarbageCollected<HTMLHtmlElement>(*document_);
   html->AppendChild(MakeGarbageCollected<HTMLBodyElement>(*document_));
   document_->AppendChild(html);
@@ -44,7 +49,7 @@ HTMLDocument& StaticRangeTest::GetDocument() const {
 
 TEST_F(StaticRangeTest, SplitTextNodeRangeWithinText) {
   V8TestingScope scope;
-  GetDocument().body()->setInnerHTML("1234");
+  GetDocument().body()->SetInnerHTMLWithoutTrustedTypes("1234");
   auto* old_text = To<Text>(GetDocument().body()->firstChild());
 
   auto* static_range04 = MakeGarbageCollected<StaticRange>(
@@ -115,7 +120,7 @@ TEST_F(StaticRangeTest, SplitTextNodeRangeWithinText) {
 
 TEST_F(StaticRangeTest, SplitTextNodeRangeOutsideText) {
   V8TestingScope scope;
-  GetDocument().body()->setInnerHTML(
+  GetDocument().body()->SetInnerHTMLWithoutTrustedTypes(
       "<span id=\"outer\">0<span id=\"inner-left\">1</span>SPLITME<span "
       "id=\"inner-right\">2</span>3</span>");
 
@@ -230,7 +235,7 @@ TEST_F(StaticRangeTest, SplitTextNodeRangeOutsideText) {
 
 TEST_F(StaticRangeTest, InvalidToRange) {
   V8TestingScope scope;
-  GetDocument().body()->setInnerHTML("1234");
+  GetDocument().body()->SetInnerHTMLWithoutTrustedTypes("1234");
   auto* old_text = To<Text>(GetDocument().body()->firstChild());
 
   auto* static_range04 = MakeGarbageCollected<StaticRange>(

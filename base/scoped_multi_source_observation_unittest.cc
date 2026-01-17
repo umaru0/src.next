@@ -1,11 +1,14 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "base/scoped_multi_source_observation.h"
 
+#include <algorithm>
+
 #include "base/containers/contains.h"
-#include "base/ranges/algorithm.h"
+#include "base/memory/raw_ptr.h"
+#include "base/scoped_observation_traits.h"
 #include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,7 +26,7 @@ class TestSource {
   size_t num_observers() const { return observers_.size(); }
 
  private:
-  std::vector<TestSourceObserver*> observers_;
+  std::vector<raw_ptr<TestSourceObserver, VectorExperimental>> observers_;
 };
 
 void TestSource::AddObserver(TestSourceObserver* observer) {
@@ -31,7 +34,7 @@ void TestSource::AddObserver(TestSourceObserver* observer) {
 }
 
 void TestSource::RemoveObserver(TestSourceObserver* observer) {
-  auto it = base::ranges::find(observers_, observer);
+  auto it = std::ranges::find(observers_, observer);
   ASSERT_TRUE(it != observers_.end());
   observers_.erase(it);
 }
@@ -190,11 +193,22 @@ class TestSourceWithNonDefaultNames {
 
 using TestScopedMultiSourceObservationWithNonDefaultNames =
     ScopedMultiSourceObservation<TestSourceWithNonDefaultNames,
-                                 TestSourceObserver,
-                                 &TestSourceWithNonDefaultNames::AddFoo,
-                                 &TestSourceWithNonDefaultNames::RemoveFoo>;
+                                 TestSourceObserver>;
 
 }  // namespace
+
+template <>
+struct ScopedObservationTraits<TestSourceWithNonDefaultNames,
+                               TestSourceObserver> {
+  static void AddObserver(TestSourceWithNonDefaultNames* source,
+                          TestSourceObserver* observer) {
+    source->AddFoo(observer);
+  }
+  static void RemoveObserver(TestSourceWithNonDefaultNames* source,
+                             TestSourceObserver* observer) {
+    source->RemoveFoo(observer);
+  }
+};
 
 TEST_F(ScopedMultiSourceObservationTest, NonDefaultNames) {
   TestSourceWithNonDefaultNames nds1;

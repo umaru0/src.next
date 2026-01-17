@@ -1,17 +1,18 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/common/csp_validator.h"
+
+#include <fuzzer/FuzzedDataProvider.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <string>
 #include <vector>
 
-#include <fuzzer/FuzzedDataProvider.h>
-
-#include "extensions/common/csp_validator.h"
 #include "extensions/common/install_warning.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "third_party/icu/fuzzers/fuzzer_utils.h"
 
 namespace extensions {
@@ -47,11 +48,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       /*options=*/fuzzed_data_provider.ConsumeIntegralInRange(0, 4),
       &install_warnings);
 
-  csp_validator::GetEffectiveSandoxedPageCSP(content_security_policy,
-                                             manifest_key, &install_warnings);
+  csp_validator::GetSandboxedPageCSPDisallowingRemoteSources(
+      content_security_policy, manifest_key, &install_warnings);
 
   std::u16string error;
-  csp_validator::DoesCSPDisallowRemoteCode(content_security_policy,
+  std::string mock_extension_id = "abcd";
+  auto location = mojom::ManifestLocation::kInternal;
+  csp_validator::DoesCSPDisallowRemoteCode(mock_extension_id, location,
+                                           content_security_policy,
                                            manifest_key, &error);
 
   return 0;

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,17 +7,17 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/favicon/core/favicon_client.h"
 #include "components/favicon/core/favicon_service_impl.h"
@@ -62,13 +62,13 @@ const favicon_base::IconType kTestIconTypeForServerRequests =
 const char kTestGoogleServerClientParam[] = "test_chrome";
 
 ACTION(FailFetch) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(*arg2), gfx::Image(),
                                 image_fetcher::RequestMetadata()));
 }
 
 ACTION_P2(PassFetch, width, height) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(*arg2), gfx::test::CreateImage(width, height),
                      image_fetcher::RequestMetadata()));
@@ -86,8 +86,8 @@ class IconCacherTestBase : public ::testing::Test {
   IconCacherTestBase()
       : favicon_service_(/*favicon_client=*/nullptr, &history_service_) {
     CHECK(history_dir_.CreateUniqueTempDir());
-    CHECK(history_service_.Init(
-        history::HistoryDatabaseParams(history_dir_.GetPath(), 0, 0)));
+    CHECK(history_service_.Init(history::HistoryDatabaseParams(
+        history_dir_.GetPath(), 0, 0, version_info::Channel::UNKNOWN)));
   }
 
   void PreloadIcon(const GURL& url,
@@ -153,42 +153,22 @@ class IconCacherTestPopularSites : public IconCacherTestBase {
         image_decoder_() {}
 
   void SetUp() override {
-    if (ui::ResourceBundle::HasSharedInstance()) {
-      ui::ResourceBundle::CleanupSharedInstance();
-    }
     ON_CALL(mock_resource_delegate_, GetPathForResourcePack(_, _))
         .WillByDefault(ReturnArg<0>());
-    ON_CALL(mock_resource_delegate_, GetPathForLocalePack(_, _))
-        .WillByDefault(ReturnArg<0>());
-    ui::ResourceBundle::InitSharedInstanceWithLocale(
-        "en-US", &mock_resource_delegate_,
-        ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
-  }
-
-  void TearDown() override {
-    if (ui::ResourceBundle::HasSharedInstance()) {
-      ui::ResourceBundle::CleanupSharedInstance();
-    }
-    base::FilePath pak_path;
-#if BUILDFLAG(IS_ANDROID)
-    base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
-#else
-    base::PathService::Get(base::DIR_ASSETS, &pak_path);
-#endif
-
-    base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
-
-    ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-        pak_path.AppendASCII("components_tests_resources.pak"),
-        ui::kScaleFactorNone);
   }
 
   PopularSites::Site site_;
   std::unique_ptr<MockImageFetcher> image_fetcher_;
   image_fetcher::FakeImageDecoder image_decoder_;
   NiceMock<ui::MockResourceBundleDelegate> mock_resource_delegate_;
+
+  // A ResourceBundle that uses the test's mock delegate.
+  ui::ResourceBundle resource_bundle_with_mock_delegate_{
+      &mock_resource_delegate_};
+
+  // Swap in the test ResourceBundle for the lifetime of the test.
+  ui::ResourceBundle::SharedInstanceSwapperForTesting resource_bundle_swapper_{
+      &resource_bundle_with_mock_delegate_};
 };
 
 TEST_F(IconCacherTestPopularSites, LargeCached) {
